@@ -3,7 +3,7 @@ volumes:
 
 services:
   payment-service:
-    build: .
+    image: ghcr.io/gayagenius/payment-service:latest
     container_name: payment-service
     ports:
       - "8080:8080"
