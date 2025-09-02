@@ -5,14 +5,14 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies (only for build stage)
+# Install dependencies 
 COPY package*.json ./
 RUN npm install
 
 # Copy the rest of the app
 COPY . .
 
-# Optional: if you have a build step (React, NestJS, etc.)
+# Optional: if you have a build step 
 # RUN npm run build
 
 
