@@ -8,7 +8,7 @@ on:
 
 permissions:
   contents: read
-  packages: write   # 👈 required for pushing to GHCR
+  packages: write  
 
 jobs:
   build:
