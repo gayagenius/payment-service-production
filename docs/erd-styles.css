@@ -1,0 +1,159 @@
+/* Custom Mermaid ERD Styling */
+.mermaid {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    border-radius: 12px;
+    padding: 40px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    min-height: 600px;
+    width: 100%;
+}
+
+/* Entity styling (table containers) */
+.mermaid .er .entityBox {
+    background: linear-gradient(145deg, #ffffff, #f8f9fa);
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    margin: 25px;
+    padding: 15px;
+    min-width: 280px;
+    transition: all 0.3s ease;
+}
+
+.mermaid .er .entityBox:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    border-color: #1976d2;
+}
+
+/* Entity title styling */
+.mermaid .er .entityLabel {
+    background: linear-gradient(135deg, #2c3e50, #34495e);
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 18px;
+    padding: 15px 20px;
+    margin: 0;
+    border-radius: 10px 10px 0 0;
+    text-align: center;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    border: 2px solid #34495e;
+}
+
+/* Attribute styling */
+.mermaid .er .attributeBox {
+    background: transparent;
+    border: none;
+    padding: 10px 18px;
+    margin: 2px 0;
+    font-size: 14px;
+    line-height: 1.5;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    min-height: 20px;
+}
+
+.mermaid .er .attributeBox:hover {
+    background: rgba(25, 118, 210, 0.05);
+}
+
+/* Even rows styling */
+.mermaid .er .attributeBox:nth-child(even) {
+    background: rgba(25, 118, 210, 0.02);
+}
+
+/* Attribute label styling */
+.mermaid .er .attributeLabel {
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+/* Relationship line styling */
+.mermaid .er .relationshipLine {
+    stroke: #34495e;
+    stroke-width: 3;
+    fill: none;
+}
+
+.mermaid .er .relationshipLabel {
+    fill: #2c3e50;
+    font-weight: 600;
+    font-size: 11px;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    max-width: 200px;
+    word-wrap: break-word;
+    text-align: center;
+}
+
+/* Arrow markers */
+.mermaid .er .arrowhead {
+    fill: #34495e;
+}
+
+/* PK indicator */
+.mermaid .er .attributeBox .pk {
+    color: #27ae60;
+    font-weight: 700;
+}
+
+/* FK indicator */
+.mermaid .er .attributeBox .fk {
+    color: #f39c12;
+    font-weight: 600;
+}
+
+/* NOT NULL indicator */
+.mermaid .er .attributeBox .not-null {
+    color: #e74c3c;
+    font-weight: 600;
+}
+
+/* UNIQUE indicator */
+.mermaid .er .attributeBox .unique {
+    color: #9b59b6;
+    font-weight: 600;
+}
+
+/* DEFAULT indicator */
+.mermaid .er .attributeBox .default {
+    color: #3498db;
+    font-weight: 500;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .mermaid {
+        padding: 10px;
+        font-size: 12px;
+    }
+    
+    .mermaid .er .entityLabel {
+        font-size: 14px;
+        padding: 8px 12px;
+    }
+    
+    .mermaid .er .attributeBox {
+        padding: 6px 12px;
+        font-size: 11px;
+    }
+    
+    .mermaid .er .attributeBox .attributeLabel {
+        min-width: 100px;
+    }
+    
+    .mermaid .er .attributeBox .attributeType {
+        min-width: 80px;
+        font-size: 10px;
+    }
+    
+    .mermaid .er .attributeBox .attributeConstraints {
+        min-width: 120px;
+        font-size: 10px;
+    }
+}

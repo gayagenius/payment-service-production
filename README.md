@@ -2,6 +2,35 @@
 # payment-service
 Payment Service microservice for handling payments, refunds, and payment history as part of the e-commerce system (Group 1)
 
+## 🗄️ Database Setup
+
+### Prerequisites
+- PostgreSQL 14+ installed locally
+- Database `payment_service` created
+
+### Run Migrations
+```bash
+# Create database (if not exists)
+createdb payment_service
+
+# Run all migrations
+npm run migrate
+
+# Reset database (drops and recreates all tables)
+npm run migrate:reset
+```
+
+### Environment Variables (Optional)
+```bash
+export DB_HOST=localhost
+export DB_PORT=5432
+export DB_NAME=payment_service
+export DB_USER= the user set for postgres on your local
+export DB_PASSWORD=the password set for your account
+```
+
+---
+
 (Add GitHub Actions workflow for Docker build & push)
 **README.md** that:
 
@@ -140,6 +169,26 @@ jobs:
 > * `DOCKER_TOKEN`
 
 ---
+
+## View Documentation Locally
+
+To view the API documentation and ER Diagram locally:
+
+1. **Start the documentation server:**
+   ```bash
+   npm run docs
+   ```
+
+2. **Access the documentation:**
+   - **Swagger UI**: http://localhost:8081/docs/swagger-ui.html
+   - **ER Diagram**: http://localhost:8081/docs/erd-viewer.html
+
+The ER Diagram is built using **Mermaid** and automatically loads from `docs/ERD.mmd`. The Swagger documentation loads the OpenAPI spec from `api/openapi.yaml`.
+
+**Development mode** (auto-restart on changes):
+```bash
+npm run dev:docs
+``` 
 
 ## Contributing
 

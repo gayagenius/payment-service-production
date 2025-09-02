@@ -2,10 +2,15 @@
   "name": "payment-service",
   "version": "1.0.0",
   "description": "Payment service microservice for e-commerce platform",
+  "type": "module",
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",
-    "dev": "nodemon src/app.js"
+    "dev": "nodemon src/app.js",
+    "docs": "node docs-server.js",
+    "dev:docs": "nodemon docs-server.js",
+    "migration": "node migrate.js",
+    "migration:reset": "node migrate.js --reset"
   },
   "dependencies": {
     "express": "^4.19.2",
