@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",            // or ESNext
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext", 
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,          // optional, ignores type errors in node_modules
+    "lib": ["ESNext", "DOM"],      // include ESNext features
+    "types": ["node"]              // include Node types
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
+
