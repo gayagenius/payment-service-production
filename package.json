@@ -6,7 +6,7 @@
   "main": "index.js",
   "scripts": {
     "lint": "eslint . --ext .js,.ts",
-    "test": "vitest run",
+    "test": "vitest run --run --coverage",
     "typecheck": "tsc --noEmit"
   },
   "repository": {
@@ -24,6 +24,7 @@
     "express": "^5.1.0"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^3.2.4",
     "eslint": "^9.34.0",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
