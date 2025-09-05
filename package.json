@@ -8,7 +8,13 @@
     "lint": "eslint . --ext .js,.ts",
     "test": "vitest run --run --coverage",
     "typecheck": "tsc --noEmit",
-    "build": "tsc"
+    "build": "tsc",
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
+    "docs": "node docs-server.js",
+    "dev:docs": "nodemon docs-server.js",
+    "migration": "node migrate.js",
+    "migration:reset": "node migrate.js --reset"
   },
   "repository": {
     "type": "git",
@@ -22,6 +28,7 @@
   },
   "homepage": "https://github.com/gayagenius/payment-service-production#readme",
   "dependencies": {
+    "body-parser": "^2.2.0",
     "express": "^5.1.0"
   },
   "devDependencies": {
@@ -29,6 +36,9 @@
     "@vitest/coverage-v8": "^3.2.4",
     "eslint": "^9.34.0",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "express": "^4.19.2",
+    "pg": "^8.11.3",
+    "nodemon": "^3.1.0"
   }
 }
