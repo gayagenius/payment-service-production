@@ -333,7 +333,7 @@ sequenceDiagram
 
 ### Enhanced Payment States
 
-```
+``` bash
 Traditional: [pending, processing, success, failed, cancelled, refunded]
 Enhanced: [pending, stk_sent, processing, success, failed, cancelled, expired, refunded, partially_refunded]
 ```
