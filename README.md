@@ -147,23 +147,166 @@ export DB_PASSWORD=the password set for your account
 
 ---
 
-## API Documentation
+## 🚀 API Documentation
 
-To view the API documentation and ER Diagram locally:
+### Quick Start
 
-1. **Start the documentation server:**
+1. **Start the payment service:**
+   ```bash
+   npm run start
+   ```
+
+2. **Start the documentation server:**
    ```bash
    npm run docs
    ```
 
-2. **Access the documentation:**
+3. **Access the documentation:**
    - **Swagger UI**: http://localhost:8081/docs/swagger-ui.html
    - **ER Diagram**: http://localhost:8081/docs/erd-viewer.html
 
-The ER Diagram is built using **Mermaid** and automatically loads from `docs/ERD.mmd`. The Swagger documentation loads the OpenAPI spec from `api/openapi.yaml`.
+### Environment Variables
 
-**Development mode** (auto-restart on changes):
+Create a `.env` file with the following variables:
+
 ```bash
+# Payment Service Configuration
+PORT=8080
+NODE_ENV=development
+
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=payment_service
+DB_USER=your_postgres_user
+DB_PASSWORD=your_postgres_password
+
+# RabbitMQ Configuration
+RABBITMQ_HOST=localhost
+RABBITMQ_PORT=5672
+RABBITMQ_USER=guest
+RABBITMQ_PASS=guest
+RABBITMQ_VHOST=/
+
+# JWT Configuration (for testing)
+JWT_SECRET=your-jwt-secret-key
+
+# Documentation Server (runs on different port)
+DOCS_PORT=8081
+```
+
+**Port Configuration:**
+- **Payment Service**: Port 8080 (main API)
+- **Documentation Server**: Port 8081 (Swagger UI, ERD)
+- **RabbitMQ**: Port 5672 (message queue)
+
+### API Endpoints
+
+#### Base URL
+- **Local Development**: `http://localhost:8080`
+- **Documentation**: `http://localhost:8081`
+
+#### Authentication
+All endpoints require Bearer JWT authentication:
+```bash
+Authorization: Bearer <your-jwt-token>
+```
+
+#### Key Headers
+- **`Idempotency-Key`**: Required for POST endpoints to ensure idempotent requests
+- **`X-Request-Id`**: Optional correlation ID for request tracing
+- **`X-Correlation-ID`**: Alternative correlation ID header
+
+#### Core Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/payments` | Create a new payment |
+| `GET` | `/payments/{id}` | Get payment by ID |
+| `GET` | `/payments/user/{userId}` | Get user's payments |
+| `POST` | `/payments/{id}/refund` | Create refund for payment |
+| `GET` | `/refunds/{id}` | Get refund by ID |
+| `GET` | `/methods/types` | Get payment method types |
+| `POST` | `/methods` | Add payment method |
+| `GET` | `/methods/user/{userId}` | Get user's payment methods |
+| `GET` | `/health` | Health check |
+
+### Response Format
+
+#### Success Response
+```json
+{
+  "data": {
+    // Response payload specific to endpoint
+  },
+  "metadata": {
+    "status": 200,
+    "correlation_id": "abc-123-xyz"
+  }
+}
+```
+
+#### Error Response
+```json
+{
+  "error": {
+    "code": "INVALID_CURRENCY",
+    "message": "Currency code must be a valid ISO 4217 code",
+    "status": 400,
+    "correlation_id": "abc-123-xyz",
+    "details": {
+      "field": "currency",
+      "value": "INVALID",
+      "constraint": "Must be a valid ISO 4217 currency code"
+    }
+  }
+}
+```
+
+### Status Codes
+
+| Code | Meaning |
+|------|---------|
+| 200 | OK |
+| 201 | Created |
+| 202 | Accepted |
+| 204 | No Content |
+| 400 | Bad Request |
+| 401 | Unauthorized |
+| 403 | Forbidden |
+| 404 | Not Found |
+| 409 | Conflict |
+| 422 | Unprocessable Entity |
+| 429 | Too Many Requests |
+| 500 | Internal Server Error |
+| 502 | Bad Gateway |
+| 503 | Service Unavailable |
+| 504 | Gateway Timeout |
+
+### Postman Collection
+
+Import the provided Postman collection for easy API testing:
+
+1. **Collection**: `docs/payment-service.postman_collection.json`
+2. **Environment**: `docs/payment-service.postman_environment.json`
+
+#### Import Instructions:
+1. Open Postman
+2. Click "Import" → "Upload Files"
+3. Select both JSON files
+4. Set the environment variables in Postman
+5. Start testing!
+
+### Rate Limiting
+- **100 requests per minute** per user
+- **60 requests per minute** per IP address
+
+### Development Mode
+```bash
+# Auto-restart on changes
+npm run dev
+
+# Documentation with auto-restart
 npm run dev:docs
 ``` 
 

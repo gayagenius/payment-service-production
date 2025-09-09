@@ -62,26 +62,12 @@ CREATE TABLE user_payment_methods (
     )
 );
 
--- Orders
-CREATE TABLE orders (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL,
-    order_number VARCHAR(100) NOT NULL UNIQUE,
-    total_amount INTEGER NOT NULL,
-    currency CHAR(3) NOT NULL,
-    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    
-    CONSTRAINT chk_orders_total_amount CHECK (total_amount > 0),
-    CONSTRAINT chk_orders_currency CHECK (currency ~ '^[A-Z]{3}$')
-);
 
 -- Payments
 CREATE TABLE payments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL,
-    order_id UUID NOT NULL REFERENCES orders(id),
+    order_id VARCHAR(255) NOT NULL,
     amount INTEGER NOT NULL,
     currency CHAR(3) NOT NULL,
     status payment_status NOT NULL DEFAULT 'PENDING',
@@ -134,14 +120,10 @@ CREATE INDEX idx_user_payment_methods_user_default ON user_payment_methods(user_
 CREATE INDEX idx_user_payment_methods_type_id ON user_payment_methods(payment_method_type_id);
 CREATE INDEX idx_user_payment_methods_active ON user_payment_methods(user_id, is_active, created_at DESC);
 
--- Orders
-CREATE INDEX idx_orders_user_id_created ON orders(user_id, created_at DESC);
-CREATE INDEX idx_orders_status ON orders(status);
-CREATE INDEX idx_orders_order_number ON orders(order_number);
 
 -- Payments
 CREATE INDEX idx_payments_user_id_created ON payments(user_id, created_at DESC);
-CREATE INDEX idx_payments_order_id ON payments(order_id);
+CREATE INDEX idx_payments_order_id ON payments(order_id) WHERE order_id IS NOT NULL;
 CREATE INDEX idx_payments_status_created ON payments(status, created_at DESC);
 CREATE INDEX idx_payments_payment_method_id ON payments(payment_method_id) WHERE payment_method_id IS NOT NULL;
 
@@ -184,9 +166,6 @@ CREATE TRIGGER update_user_payment_methods_updated_at
     BEFORE UPDATE ON user_payment_methods 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_orders_updated_at 
-    BEFORE UPDATE ON orders 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_payments_updated_at 
     BEFORE UPDATE ON payments 
@@ -202,7 +181,6 @@ CREATE TRIGGER update_refunds_updated_at
 
 COMMENT ON TABLE payment_method_types IS 'Master catalog of supported payment method types';
 COMMENT ON TABLE user_payment_methods IS 'Stores encrypted payment method information for users';
-COMMENT ON TABLE orders IS 'Stores order information for payments';
 COMMENT ON TABLE payments IS 'Main payments table storing all payment transactions';
 COMMENT ON TABLE refunds IS 'Stores refund information for payments';
 

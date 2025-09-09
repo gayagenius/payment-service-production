@@ -1,0 +1,498 @@
+{
+  "info": {
+    "name": "Payment Service API",
+    "description": "Complete API collection for Payment Service with all endpoints, test cases, and examples",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseURL",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "your-jwt-token-here",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "string"
+    },
+    {
+      "key": "orderId",
+      "value": "order_123",
+      "type": "string"
+    },
+    {
+      "key": "paymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refundId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Payments",
+      "description": "Payment-related endpoints",
+      "item": [
+        {
+          "name": "Create Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "payment_{{$timestamp}}",
+                "description": "Unique key for idempotent requests"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "req_{{$timestamp}}",
+                "description": "Request correlation ID"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2500,\n  \"currency\": \"KES\",\n  \"paymentMethodId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"metadata\": {\n    \"orderId\": \"{{orderId}}\",\n    \"description\": \"Purchase of premium subscription\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseURL}}/payments",
+              "host": ["{{baseURL}}"],
+              "path": ["payments"]
+            },
+            "description": "Create a new payment transaction"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": 2500,\n  \"currency\": \"KES\",\n  \"paymentMethodId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"metadata\": {\n    \"orderId\": \"order_123\",\n    \"description\": \"Purchase of premium subscription\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{baseURL}}/payments",
+                  "host": ["{{baseURL}}"],
+                  "path": ["payments"]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"id\": \"550e8400-e29b-41d4-a716-446655440001\",\n    \"userId\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"orderId\": \"order_123\",\n    \"amount\": 2500,\n    \"currency\": \"KES\",\n    \"status\": \"SUCCEEDED\",\n    \"paymentMethodId\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"gatewayResponse\": {\n      \"transactionId\": \"txn_1234567890\",\n      \"processorResponse\": \"approved\"\n    },\n    \"idempotencyKey\": \"payment_1234567890\",\n    \"createdAt\": \"2024-01-15T10:30:00Z\",\n    \"updatedAt\": \"2024-01-15T10:30:00Z\"\n  },\n  \"meta\": {\n    \"status\": 201,\n    \"correlation_id\": \"abc-123-xyz\"\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('paymentId', response.data.id);",
+                  "    pm.test('Payment created successfully', () => {",
+                  "        pm.expect(response.data.status).to.be.oneOf(['SUCCEEDED', 'PENDING', 'AUTHORIZED']);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Payment by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Request-Id",
+                "value": "req_{{$timestamp}}",
+                "description": "Request correlation ID"
+              }
+            ],
+            "url": {
+              "raw": "{{baseURL}}/payments/{{paymentId}}",
+              "host": ["{{baseURL}}"],
+              "path": ["payments", "{{paymentId}}"]
+            },
+            "description": "Retrieve a specific payment by ID"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseURL}}/payments/550e8400-e29b-41d4-a716-446655440001",
+                  "host": ["{{baseURL}}"],
+                  "path": ["payments", "550e8400-e29b-41d4-a716-446655440001"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"id\": \"550e8400-e29b-41d4-a716-446655440001\",\n    \"userId\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"orderId\": \"order_123\",\n    \"amount\": 2500,\n    \"currency\": \"KES\",\n    \"status\": \"SUCCEEDED\",\n    \"paymentMethodId\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"gatewayResponse\": {\n      \"transactionId\": \"txn_1234567890\",\n      \"processorResponse\": \"approved\"\n    },\n    \"idempotencyKey\": \"payment_1234567890\",\n    \"createdAt\": \"2024-01-15T10:30:00Z\",\n    \"updatedAt\": \"2024-01-15T10:30:00Z\"\n  },\n  \"meta\": {\n    \"status\": 200,\n    \"correlation_id\": \"abc-123-xyz\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get User Payments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Request-Id",
+                "value": "req_{{$timestamp}}",
+                "description": "Request correlation ID"
+              }
+            ],
+            "url": {
+              "raw": "{{baseURL}}/payments/user/{{userId}}?limit=10&offset=0&status=SUCCEEDED",
+              "host": ["{{baseURL}}"],
+              "path": ["payments", "user", "{{userId}}"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Number of payments to return"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Number of payments to skip"
+                },
+                {
+                  "key": "status",
+                  "value": "SUCCEEDED",
+                  "description": "Filter by payment status"
+                }
+              ]
+            },
+            "description": "Get all payments for a specific user"
+          }
+        },
+        {
+          "name": "Create Payment - Invalid Data",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "req_{{$timestamp}}",
+                "description": "Request correlation ID"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": -100,\n  \"currency\": \"INVALID\",\n  \"metadata\": {\n    \"orderId\": \"order_123\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseURL}}/payments",
+              "host": ["{{baseURL}}"],
+              "path": ["payments"]
+            },
+            "description": "Test validation error with invalid data"
+          },
+          "response": [
+            {
+              "name": "Validation Error",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": -100,\n  \"currency\": \"INVALID\",\n  \"metadata\": {\n    \"orderId\": \"order_123\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{baseURL}}/payments",
+                  "host": ["{{baseURL}}"],
+                  "path": ["payments"]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"VALIDATION_ERROR\",\n    \"message\": \"Invalid request data\",\n    \"status\": 400,\n    \"correlation_id\": \"abc-123-xyz\",\n    \"details\": {\n      \"field\": \"amount\",\n      \"constraint\": \"Amount must be greater than 0\"\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Payment - Unauthorized",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "req_{{$timestamp}}",
+                "description": "Request correlation ID"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2500,\n  \"currency\": \"KES\",\n  \"paymentMethodId\": \"550e8400-e29b-41d4-a716-446655440000\"\n}"
+            },
+            "url": {
+              "raw": "{{baseURL}}/payments",
+              "host": ["{{baseURL}}"],
+              "path": ["payments"]
+            },
+            "description": "Test unauthorized access without auth token"
+          },
+          "auth": {
+            "type": "noauth"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Refunds",
+      "description": "Refund-related endpoints",
+      "item": [
+        {
+          "name": "Create Refund",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "refund_{{$timestamp}}",
+                "description": "Unique key for idempotent requests"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "req_{{$timestamp}}",
+                "description": "Request correlation ID"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2500,\n  \"reason\": \"Customer requested cancellation\"\n}"
+            },
+            "url": {
+              "raw": "{{baseURL}}/payments/{{paymentId}}/refund",
+              "host": ["{{baseURL}}"],
+              "path": ["payments", "{{paymentId}}", "refund"]
+            },
+            "description": "Create a refund for a payment"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": 2500,\n  \"reason\": \"Customer requested cancellation\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseURL}}/payments/550e8400-e29b-41d4-a716-446655440001/refund",
+                  "host": ["{{baseURL}}"],
+                  "path": ["payments", "550e8400-e29b-41d4-a716-446655440001", "refund"]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"id\": \"550e8400-e29b-41d4-a716-446655440002\",\n    \"paymentId\": \"550e8400-e29b-41d4-a716-446655440001\",\n    \"amount\": 2500,\n    \"currency\": \"KES\",\n    \"status\": \"SUCCEEDED\",\n    \"reason\": \"Customer requested cancellation\",\n    \"idempotencyKey\": \"refund_1234567890\",\n    \"createdAt\": \"2024-01-15T11:00:00Z\",\n    \"updatedAt\": \"2024-01-15T11:00:05Z\"\n  },\n  \"meta\": {\n    \"status\": 201,\n    \"correlation_id\": \"abc-123-xyz\"\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('refundId', response.data.id);",
+                  "    pm.test('Refund created successfully', () => {",
+                  "        pm.expect(response.data.status).to.be.oneOf(['SUCCEEDED', 'PENDING']);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Refund by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Request-Id",
+                "value": "req_{{$timestamp}}",
+                "description": "Request correlation ID"
+              }
+            ],
+            "url": {
+              "raw": "{{baseURL}}/refunds/{{refundId}}",
+              "host": ["{{baseURL}}"],
+              "path": ["refunds", "{{refundId}}"]
+            },
+            "description": "Retrieve a specific refund by ID"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payment Methods",
+      "description": "Payment method management endpoints",
+      "item": [
+        {
+          "name": "Get Payment Method Types",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Request-Id",
+                "value": "req_{{$timestamp}}",
+                "description": "Request correlation ID"
+              }
+            ],
+            "url": {
+              "raw": "{{baseURL}}/methods/types",
+              "host": ["{{baseURL}}"],
+              "path": ["methods", "types"]
+            },
+            "description": "Get all available payment method types"
+          }
+        },
+        {
+          "name": "Add Payment Method",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "req_{{$timestamp}}",
+                "description": "Request correlation ID"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"type\": \"CARD\",\n  \"brand\": \"VISA\",\n  \"last4\": \"4242\",\n  \"details\": {\n    \"token\": \"tok_1234567890abcdef\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseURL}}/methods",
+              "host": ["{{baseURL}}"],
+              "path": ["methods"]
+            },
+            "description": "Add a new payment method for a user"
+          }
+        },
+        {
+          "name": "Get User Payment Methods",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Request-Id",
+                "value": "req_{{$timestamp}}",
+                "description": "Request correlation ID"
+              }
+            ],
+            "url": {
+              "raw": "{{baseURL}}/methods/user/{{userId}}",
+              "host": ["{{baseURL}}"],
+              "path": ["methods", "user", "{{userId}}"]
+            },
+            "description": "Get all payment methods for a user"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health Check",
+      "description": "System health and status endpoints",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseURL}}/health",
+              "host": ["{{baseURL}}"],
+              "path": ["health"]
+            },
+            "description": "Check service health status"
+          },
+          "auth": {
+            "type": "noauth"
+          }
+        }
+      ]
+    }
+  ]
+}

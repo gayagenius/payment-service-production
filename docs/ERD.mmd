@@ -34,21 +34,11 @@ erDiagram
         timestamptz updated_at "NOT NULL, DEFAULT now()"
     }
 
-    ORDERS {
-        uuid id PK "DEFAULT uuid_generate_v4()"
-        uuid user_id FK "NOT NULL, REFERENCES USERS(id)"
-        varchar order_number "NOT NULL, UNIQUE"
-        integer total_amount "NOT NULL, CHECK > 0"
-        char currency "NOT NULL, CHECK pattern"
-        varchar status "NOT NULL, DEFAULT PENDING"
-        timestamptz created_at "NOT NULL, DEFAULT now()"
-        timestamptz updated_at "NOT NULL, DEFAULT now()"
-    }
 
     PAYMENTS {
         uuid id PK "DEFAULT uuid_generate_v4()"
         uuid user_id FK "NOT NULL, REFERENCES USERS(id)"
-        uuid order_id FK "NOT NULL, REFERENCES ORDERS(id)"
+        uuid order_id "NOT NULL"
         integer amount "NOT NULL, CHECK > 0"
         char currency "NOT NULL, CHECK pattern"
         enum status "NOT NULL, DEFAULT PENDING"
@@ -72,9 +62,7 @@ erDiagram
     }
 
     USERS ||--o{ USER_PAYMENT_METHODS : "user_owns_and_manages_saved_payment_methods"
-    USERS ||--o{ ORDERS : "user_creates_and_places_commercial_orders"
     USERS ||--o{ PAYMENTS : "user_initiates_payment_transactions"
     PAYMENT_METHOD_TYPES ||--o{ USER_PAYMENT_METHODS : "payment_type_defines_user_payment_method_structure"
-    ORDERS ||--o{ PAYMENTS : "order_requires_payment_to_complete_transaction"
     USER_PAYMENT_METHODS ||--o{ PAYMENTS : "saved_payment_method_processes_payment_transactions"
     PAYMENTS ||--o{ REFUNDS : "payment_can_have_multiple_refund_requests"
