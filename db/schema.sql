@@ -71,30 +71,12 @@ CREATE TABLE user_payment_methods (
 );
 
 -- =============================================
--- ORDERS TABLE
--- =============================================
-CREATE TABLE orders (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL,
-    order_number VARCHAR(100) NOT NULL UNIQUE,
-    total_amount INTEGER NOT NULL,
-    currency CHAR(3) NOT NULL,
-    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    
-    -- Constraints
-    CONSTRAINT chk_orders_total_amount CHECK (total_amount > 0),
-    CONSTRAINT chk_orders_currency CHECK (currency ~ '^[A-Z]{3}$')
-);
-
--- =============================================
 -- PAYMENTS TABLE
 -- =============================================
 CREATE TABLE payments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL,
-    order_id UUID NOT NULL REFERENCES orders(id), -- required - each payment must be tied to an order
+    order_id VARCHAR(255) NOT NULL, -- required - each payment must be tied to an order
     amount INTEGER NOT NULL,
     currency CHAR(3) NOT NULL,
     status payment_status NOT NULL DEFAULT 'PENDING',
@@ -154,11 +136,6 @@ WHERE idempotency_key IS NOT NULL;
 -- INDEXES FOR PERFORMANCE
 -- =============================================
 
--- Order indexes
-CREATE INDEX idx_orders_user_id_created ON orders(user_id, created_at DESC);
-CREATE INDEX idx_orders_status ON orders(status);
-CREATE INDEX idx_orders_order_number ON orders(order_number);
-
 -- Payment method type indexes
 CREATE INDEX idx_payment_method_types_code ON payment_method_types(code);
 CREATE INDEX idx_payment_method_types_active ON payment_method_types(is_active, sort_order);
@@ -171,7 +148,6 @@ CREATE INDEX idx_user_payment_methods_active ON user_payment_methods(user_id, is
 
 -- Payment indexes
 CREATE INDEX idx_payments_user_id_created ON payments(user_id, created_at DESC);
-CREATE INDEX idx_payments_order_id ON payments(order_id) WHERE order_id IS NOT NULL;
 CREATE INDEX idx_payments_status_created ON payments(status, created_at DESC);
 CREATE INDEX idx_payments_payment_method_id ON payments(payment_method_id) WHERE payment_method_id IS NOT NULL;
 
