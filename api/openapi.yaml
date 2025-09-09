@@ -97,19 +97,23 @@ paths:
                 success:
                   summary: Successful payment
                   value:
-                    id: "550e8400-e29b-41d4-a716-446655440001"
-                    userId: "550e8400-e29b-41d4-a716-446655440000"
-                    orderId: "order_123"
-                    amount: 2500
-                    currency: "KES"
-                    status: "SUCCEEDED"
-                    paymentMethodId: "550e8400-e29b-41d4-a716-446655440000"
-                    gatewayResponse:
-                      transactionId: "txn_1234567890"
-                      processorResponse: "approved"
-                    idempotencyKey: "idem_1234567890"
-                    createdAt: "2024-01-15T10:30:00Z"
-                    updatedAt: "2024-01-15T10:30:00Z"
+                    data:
+                      id: "550e8400-e29b-41d4-a716-446655440001"
+                      userId: "550e8400-e29b-41d4-a716-446655440000"
+                      orderId: "order_123"
+                      amount: 2500
+                      currency: "KES"
+                      status: "SUCCEEDED"
+                      paymentMethodId: "550e8400-e29b-41d4-a716-446655440000"
+                      gatewayResponse:
+                        transactionId: "txn_1234567890"
+                        processorResponse: "approved"
+                      idempotencyKey: "idem_1234567890"
+                      createdAt: "2024-01-15T10:30:00Z"
+                      updatedAt: "2024-01-15T10:30:00Z"
+                    metadata:
+                      status: 201
+                      correlation_id: "abc-123-xyz"
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -965,29 +969,67 @@ components:
         - limit
         - hasMore
 
-    Problem:
+    ErrorResponse:
       type: object
       required:
-        - status
-        - message
+        - error
       properties:
-        status:
-          type: string
-          enum: [VALIDATION_ERROR, NOT_FOUND, CONFLICT, RATE_LIMITED, UNAUTHORIZED, INTERNAL_ERROR]
-          description: Error status for frontend mapping
-          example: "VALIDATION_ERROR"
-        message:
-          type: string
-          description: Human-readable error message
-          example: "Invalid currency code"
-        details:
+        error:
           type: object
-          description: Additional error details
-          additionalProperties: true
-          example:
-            field: "currency"
-            value: "INVALID"
-            constraint: "Must be a valid ISO 4217 currency code"
+          required:
+            - code
+            - message
+            - status
+            - correlation_id
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code
+              example: "INVALID_CURRENCY"
+            message:
+              type: string
+              description: Human-readable error message
+              example: "Currency code must be a valid ISO 4217 code"
+            status:
+              type: integer
+              description: HTTP status code
+              example: 400
+            correlation_id:
+              type: string
+              description: Request correlation ID for tracing
+              example: "abc-123-xyz"
+            details:
+              type: object
+              description: Additional error details
+              additionalProperties: true
+              example:
+                field: "currency"
+                value: "INVALID"
+                constraint: "Must be a valid ISO 4217 currency code"
+
+    SuccessResponse:
+      type: object
+      required:
+        - data
+        - metadata
+      properties:
+        data:
+          type: object
+          description: Response payload specific to endpoint
+        metadata:
+          type: object
+          required:
+            - status
+            - correlation_id
+          properties:
+            status:
+              type: integer
+              description: HTTP status code
+              example: 200
+            correlation_id:
+              type: string
+              description: Request correlation ID for tracing
+              example: "abc-123-xyz"
 
   responses:
     BadRequest:
@@ -995,44 +1037,56 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/ErrorResponse'
           examples:
             missing_fields:
               summary: Missing required fields
               value:
-                status: "VALIDATION_ERROR"
-                message: "Missing required fields"
-                details:
-                  missingFields: ["amount", "currency"]
-                  providedFields: ["orderId"]
+                error:
+                  code: "MISSING_REQUIRED_FIELDS"
+                  message: "Missing required fields: amount, currency"
+                  status: 400
+                  correlation_id: "abc-123-xyz"
+                  details:
+                    missingFields: ["amount", "currency"]
+                    providedFields: ["orderId"]
             invalid_json:
               summary: Invalid JSON format
               value:
-                status: "VALIDATION_ERROR"
-                message: "Invalid JSON format"
-                details:
-                  error: "Unexpected token in JSON at position 15"
+                error:
+                  code: "INVALID_JSON"
+                  message: "Invalid JSON format"
+                  status: 400
+                  correlation_id: "abc-123-xyz"
+                  details:
+                    error: "Unexpected token in JSON at position 15"
 
     Unauthorized:
       description: Unauthorized - Invalid or missing authentication
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/ErrorResponse'
           examples:
             missing_token:
               summary: Missing authentication token
               value:
-                status: "UNAUTHORIZED"
-                message: "Authentication token is required"
-                details:
-                  header: "Authorization"
-                  expectedFormat: "Bearer <token>"
+                error:
+                  code: "MISSING_AUTH_TOKEN"
+                  message: "Authentication token is required"
+                  status: 401
+                  correlation_id: "abc-123-xyz"
+                  details:
+                    header: "Authorization"
+                    expectedFormat: "Bearer <token>"
             invalid_token:
               summary: Invalid authentication token
               value:
-                status: "UNAUTHORIZED"
-                message: "Invalid or expired authentication token"
+                error:
+                  code: "INVALID_AUTH_TOKEN"
+                  message: "Invalid or expired authentication token"
+                  status: 401
+                  correlation_id: "abc-123-xyz"
                 details:
                   reason: "Token signature verification failed"
             insufficient_scope:
@@ -1049,13 +1103,16 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/ErrorResponse'
           examples:
             payment_not_found:
               summary: Payment not found
               value:
-                status: "NOT_FOUND"
-                message: "Payment not found"
+                error:
+                  code: "PAYMENT_NOT_FOUND"
+                  message: "Payment not found"
+                  status: 404
+                  correlation_id: "abc-123-xyz"
                 details:
                   resourceType: "payment"
                   resourceId: "550e8400-e29b-41d4-a716-446655440001"
@@ -1081,13 +1138,16 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/ErrorResponse'
           examples:
             invalid_currency:
               summary: Invalid currency code
               value:
-                status: "VALIDATION_ERROR"
-                message: "Invalid currency code"
+                error:
+                  code: "INVALID_CURRENCY"
+                  message: "Invalid currency code"
+                  status: 400
+                  correlation_id: "abc-123-xyz"
                 details:
                   field: "currency"
                   value: "INVALID"
@@ -1129,13 +1189,16 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/ErrorResponse'
           examples:
             idempotency_conflict:
               summary: Idempotency key already used
               value:
-                status: "CONFLICT"
-                message: "Idempotency key already used"
+                error:
+                  code: "IDEMPOTENCY_CONFLICT"
+                  message: "Idempotency key already used"
+                  status: 409
+                  correlation_id: "abc-123-xyz"
                 details:
                   idempotencyKey: "idem_1234567890"
                   existingResourceId: "550e8400-e29b-41d4-a716-446655440001"
@@ -1155,13 +1218,16 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/ErrorResponse'
           examples:
             user_rate_limit:
               summary: User rate limit exceeded
               value:
-                status: "RATE_LIMITED"
-                message: "User rate limit exceeded"
+                error:
+                  code: "RATE_LIMIT_EXCEEDED"
+                  message: "User rate limit exceeded"
+                  status: 429
+                  correlation_id: "abc-123-xyz"
                 details:
                   limit: 100
                   window: "1 minute"
@@ -1183,13 +1249,16 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/ErrorResponse'
           examples:
             database_error:
               summary: Database connection error
               value:
-                status: "INTERNAL_ERROR"
-                message: "Database connection failed"
+                error:
+                  code: "DATABASE_ERROR"
+                  message: "Database connection failed"
+                  status: 500
+                  correlation_id: "abc-123-xyz"
                 details:
                   requestId: "req_1234567890"
                   error: "Connection timeout"

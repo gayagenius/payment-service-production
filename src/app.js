@@ -6,6 +6,7 @@ import methods from "./routes/methods.js";
 import queueHealthRouter from "./routes/queueHealth.js"
 import testRouter from "./routes/test.js"; 
 import { connect } from "../messaging/queueSetup.js";
+import('./../docs-server.js');
 
 const app = express();
 app.use(bodyParser.json());
@@ -25,15 +26,18 @@ app.get("/", (req, res) => {
 // Start server
 const PORT = process.env.PORT || 8080;
 
-const startServer = async () => {
-  try {
-    await connect();
-    const PORT = process.env.PORT || 8080;
-    app.listen(PORT, () => console.log(`Payment service running on port http://localhost:${PORT}`));
-  } catch (error) {
-    console.error("Failed to connect to RabbitMQ, server will not start:", error);
-    process.exit(1);
-  }
+const startServer = () => {
+  // Try to connect to RabbitMQ in the background (non-blocking)
+  connect().then(() => {
+    console.log("✅ RabbitMQ connected");
+  }).catch(() => {
+    console.warn("⚠️  RabbitMQ offline - messaging disabled");
+  });
+  
+  // Start the server immediately (independent of RabbitMQ)
+  app.listen(PORT, () => {
+    console.log(`🚀 Payment service running on http://localhost:${PORT}`);
+  });
 };
 
 startServer();

@@ -6,7 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 8081;
+const PORT = process.env.DOCS_PORT || 8081;
 
 // Serve static files from docs directory
 app.use('/docs', express.static(path.join(__dirname, 'docs')));
@@ -30,7 +30,6 @@ app.get('/health', (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-    console.log(`🌐 Server: http://localhost:${PORT}`);
     console.log(`📚 Swagger UI: http://localhost:${PORT}/docs/swagger-ui.html`);
     console.log(`🗄️ ERD Viewer: http://localhost:${PORT}/docs/erd-viewer.html`);
 });
