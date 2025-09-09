@@ -169,9 +169,6 @@ END;
 $$ language 'plpgsql';
 
 -- Triggers for updated_at
-CREATE TRIGGER update_orders_updated_at 
-    BEFORE UPDATE ON orders 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_payment_method_types_updated_at 
     BEFORE UPDATE ON payment_method_types 
@@ -265,7 +262,6 @@ $$ LANGUAGE plpgsql;
 -- COMMENTS
 -- =============================================
 
-COMMENT ON TABLE orders IS 'Stores order information for payments';
 COMMENT ON TABLE payment_method_types IS 'Master catalog of supported payment method types';
 COMMENT ON TABLE user_payment_methods IS 'Stores encrypted payment method information for users';
 COMMENT ON TABLE payments IS 'Main payments table storing all payment transactions';
