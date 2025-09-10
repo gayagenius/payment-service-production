@@ -5,7 +5,7 @@
 -- SAMPLE PAYMENT METHOD TYPES
 -- =============================================
 
-INSERT INTO payment_method_types (id, code, name, description, is_active, requires_brand, requires_last4, icon_url, sort_order) VALUES
+INSERT INTO payment_method_types (id, code, name, description, is_active, requires_brand, requires_last4, icon_url) VALUES
 (
     '550e8400-e29b-41d4-a716-446655440010',
     'CARD',

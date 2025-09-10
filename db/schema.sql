@@ -138,7 +138,7 @@ WHERE idempotency_key IS NOT NULL;
 
 -- Payment method type indexes
 CREATE INDEX idx_payment_method_types_code ON payment_method_types(code);
-CREATE INDEX idx_payment_method_types_active ON payment_method_types(is_active, sort_order);
+CREATE INDEX idx_payment_method_types_active ON payment_method_types(is_active);
 
 -- User payment method indexes
 CREATE INDEX idx_user_payment_methods_user_id ON user_payment_methods(user_id);

@@ -371,8 +371,8 @@ paths:
           required: false
           schema:
             type: string
-            enum: [sort_order, name, code]
-            default: sort_order
+            enum: [name, code]
+            default: name
         - name: limit
           in: query
           description: Maximum number of payment types to return
@@ -484,7 +484,7 @@ paths:
                   value:
                     status: "BAD_REQUEST"
                     title: "Invalid sort parameter"
-                    detail: "Sort parameter must be one of: sort_order, name, code"
+                    detail: "Sort parameter must be one of: name, code"
                     instance: "/payments/types?sort=invalid"
                 invalid_limit:
                   summary: Invalid limit parameter

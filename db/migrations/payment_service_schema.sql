@@ -36,7 +36,6 @@ CREATE TABLE payment_method_types (
     requires_brand BOOLEAN NOT NULL DEFAULT false,
     requires_last4 BOOLEAN NOT NULL DEFAULT false,
     icon_url VARCHAR(255) NULL,
-    sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -112,7 +111,7 @@ CREATE TABLE refunds (
 
 -- Payment Method Types
 CREATE INDEX idx_payment_method_types_code ON payment_method_types(code);
-CREATE INDEX idx_payment_method_types_active ON payment_method_types(is_active, sort_order);
+CREATE INDEX idx_payment_method_types_active ON payment_method_types(is_active);
 
 -- User Payment Methods
 CREATE INDEX idx_user_payment_methods_user_id ON user_payment_methods(user_id);
