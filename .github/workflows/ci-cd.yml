@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+  packages: write   # 👈 required for pushing to GHCR with GITHUB_TOKEN
+
 jobs:
   lint:
     name: Lint
@@ -13,19 +17,12 @@ jobs:
     if: github.event_name == 'pull_request'
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
         with:
           node-version: 18
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run lint
-        run: npm run lint -- --max-warnings=0
+      - run: npm ci
+      - run: npm run lint -- --max-warnings=0
 
   test:
     name: Tests
@@ -34,20 +31,12 @@ jobs:
     needs: lint
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
         with:
           node-version: 18
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run tests
-        run: npm test
-
+      - run: npm ci
+      - run: npm test
 
   build-check:
     name: Build (Check only)
@@ -56,39 +45,27 @@ jobs:
     needs: test
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
         with:
           node-version: 18
+      - run: npm ci
+      - run: npm run build
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run build
-        run: npm run build
-
-  docker-build:
-    name: Build & Push Docker
+  docker:
+    name: Docker Build and Push
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    needs: [lint, test, build-check]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+      - uses: actions/checkout@v3
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }} # or use secrets.CR_PAT if you prefer
 
       - name: Build and Push Docker image
         uses: docker/build-push-action@v4
