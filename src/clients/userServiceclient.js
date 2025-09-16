@@ -1,4 +1,4 @@
-const axios = require('axios');
+import { create } from 'axios';
 
 /**
  * Standardized error types for user service operations
@@ -26,7 +26,7 @@ class UserServiceClient {
     this.retryAttempts = options.retryAttempts || 3;
     this.retryDelay = options.retryDelay || 1000;
 
-    this.client = axios.create({
+    this.client = create({
       baseURL: this.baseUrl,
       timeout: this.timeout,
       headers: {
