@@ -14,8 +14,7 @@ INSERT INTO payment_method_types (id, code, name, description, is_active, requir
     true,
     true,
     true,
-    '/icons/card.svg',
-    1
+    '/icons/card.svg'
 ),
 (
     '550e8400-e29b-41d4-a716-446655440011',
@@ -25,8 +24,7 @@ INSERT INTO payment_method_types (id, code, name, description, is_active, requir
     true,
     false,
     false,
-    '/icons/wallet.svg',
-    2
+    '/icons/wallet.svg'
 ),
 (
     '550e8400-e29b-41d4-a716-446655440012',

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { Client } from 'pg';
 import fs from 'fs';
 import path from 'path';
@@ -25,7 +26,7 @@ async function runMigrations() {
         // Read and execute migration files in order
         const migrations = [
             'payment_service_schema.sql',
-            'sample_data.sql'
+            'sample_data_fixed.sql'
         ];
 
         for (const migration of migrations) {
