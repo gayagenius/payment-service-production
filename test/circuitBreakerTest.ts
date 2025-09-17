@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import CircuitBreaker from 'opossum';
-
 // Correct way to type the instance:
 type CircuitBreakerType = InstanceType<typeof CircuitBreaker>;
 

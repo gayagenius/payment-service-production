@@ -2,9 +2,11 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ "main", "**" ]  # Run on main and all branches
+    branches: 
+      - '**'       # triggers on all branches
   pull_request:
-    branches: [ "main" ]
+    branches: 
+      - '**'       # triggers on all PRs
 
 permissions:
   contents: read
@@ -14,6 +16,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
 
     steps:
       - uses: actions/checkout@v3
