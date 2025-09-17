@@ -1,88 +1,53 @@
 // utils/circuitBreaker.js
 
 
-class CircuitOpenError extends Error {
-constructor(message = 'Circuit is open') {
-super(message);
-this.name = 'CircuitOpenError';
-}
-}
+const CircuitBreaker = require('opossum');
+const { v4: uuidv4 } = require('uuid');
 
 
-const STATES = {
-CLOSED: 'CLOSED',
-OPEN: 'OPEN',
-HALF_OPEN: 'HALF_OPEN',
+/**
+* Create a circuit breaker for a given async function.
+*
+* @param {Function} fn - async function to protect (e.g. gateway call)
+* @param {Object} options - opossum options
+* @param {number} [options.timeout=3000] - time in ms before considering a call a failure
+* @param {number} [options.errorThresholdPercentage=50] - % of failures to trip circuit OPEN
+* @param {number} [options.resetTimeout=10000] - time in ms before attempting HALF_OPEN
+* @returns {CircuitBreaker}
+*/
+function createCircuitBreaker(fn, options = {}) {
+const breaker = new CircuitBreaker(fn, {
+timeout: options.timeout || 3000,
+errorThresholdPercentage: options.errorThresholdPercentage || 50,
+resetTimeout: options.resetTimeout || 10000,
+});
+
+
+// Emit logs/metrics with correlationId
+const log = (event, payload) => {
+const correlationId = uuidv4();
+console.log(
+JSON.stringify({
+ts: new Date().toISOString(),
+event,
+correlationId,
+...payload,
+})
+);
 };
 
 
-class CircuitBreaker {
-/**
-* options:
-* - failureThreshold: number of failures before opening circuit (N)
-* - timeout: ms to stay OPEN before moving to HALF_OPEN
-* - halfOpenMaxRequests: concurrent probes allowed in HALF_OPEN (default 1)
-* - onStateChange(state, meta): optional callback for logging/metrics
-* - onEvent(eventName, meta): optional callback for events (success/failure/probe)
-*/
-constructor(options = {}) {
-const {
-failureThreshold = 5,
-timeout = 60000,
-halfOpenMaxRequests = 1,
-onStateChange = () => {},
-onEvent = () => {},
-} = options;
+breaker.on('open', () => log('circuit_open'));
+breaker.on('halfOpen', () => log('circuit_half_open'));
+breaker.on('close', () => log('circuit_closed'));
+breaker.on('reject', () => log('circuit_reject'));
+breaker.on('timeout', () => log('circuit_timeout'));
+breaker.on('failure', (err) => log('circuit_failure', { error: err.message }));
+breaker.on('success', () => log('circuit_success'));
 
 
-this.failureThreshold = failureThreshold;
-this.timeout = timeout;
-this.halfOpenMaxRequests = halfOpenMaxRequests;
-this.onStateChange = onStateChange;
-this.onEvent = onEvent;
-
-
-this.state = STATES.CLOSED;
-this.failureCount = 0;
-this.successCount = 0;
-this.concurrentHalfOpenProbes = 0;
-this.openUntil = null; // timestamp when OPEN should move to HALF_OPEN
+return breaker;
 }
 
 
-_setState(newState, meta = {}) {
-const prev = this.state;
-this.state = newState;
-// reset counters appropriately
-if (newState === STATES.CLOSED) {
-this.failureCount = 0;
-this.successCount = 0;
-this.concurrentHalfOpenProbes = 0;
-this.openUntil = null;
-}
-if (newState === STATES.OPEN) {
-this.openUntil = Date.now() + this.timeout;
-this.concurrentHalfOpenProbes = 0;
-}
-if (newState === STATES.HALF_OPEN) {
-this.concurrentHalfOpenProbes = 0;
-}
-
-
-try { this.onStateChange(newState, { prev, ...meta }); } catch (e) { /* ignore */ }
-}
-
-
-_emit(eventName, meta = {}) {
-try { this.onEvent(eventName, meta); } catch (e) { /* ignore */ }
-}
-
-
-_maybeTransitionFromOpen() {
-if (this.state !== STATES.OPEN) return;
-if (this.openUntil === null) return;
-// You may want to add logic here to transition to HALF_OPEN if timeout has passed
-}
-}
-
-module.exports = { CircuitBreaker, CircuitOpenError, STATES };
+module.exports = { createCircuitBreaker };
