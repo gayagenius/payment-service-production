@@ -95,6 +95,24 @@ CREATE TABLE payments (
 );
 
 -- =============================================
+-- PAYMENT HISTORY TABLE (Audit Trail)
+-- =============================================
+CREATE TABLE payment_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    payment_id UUID NOT NULL REFERENCES payments(id),
+    status payment_status NOT NULL,
+    previous_status payment_status NULL,
+    changed_by UUID NULL,
+    change_reason TEXT NULL,
+    metadata JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    CONSTRAINT chk_payment_history_reason CHECK (
+        change_reason IS NULL OR length(trim(change_reason)) > 0
+    )
+);
+
+-- =============================================
 -- REFUNDS TABLE
 -- =============================================
 CREATE TABLE refunds (
@@ -151,6 +169,11 @@ CREATE INDEX idx_payments_user_id_created ON payments(user_id, created_at DESC);
 CREATE INDEX idx_payments_status_created ON payments(status, created_at DESC);
 CREATE INDEX idx_payments_payment_method_id ON payments(payment_method_id) WHERE payment_method_id IS NOT NULL;
 
+-- Payment history indexes
+CREATE INDEX idx_payment_history_payment_id_created ON payment_history(payment_id, created_at DESC);
+CREATE INDEX idx_payment_history_status ON payment_history(status);
+CREATE INDEX idx_payment_history_changed_by ON payment_history(changed_by) WHERE changed_by IS NOT NULL;
+
 -- Refund indexes
 CREATE INDEX idx_refunds_payment_id_created ON refunds(payment_id, created_at DESC);
 CREATE INDEX idx_refunds_status ON refunds(status);
@@ -181,6 +204,51 @@ CREATE TRIGGER update_user_payment_methods_updated_at
 CREATE TRIGGER update_payments_updated_at 
     BEFORE UPDATE ON payments 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Function to create payment history entry
+CREATE OR REPLACE FUNCTION create_payment_history_entry()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Only create history entry if status changed
+    IF OLD.status IS DISTINCT FROM NEW.status THEN
+        INSERT INTO payment_history (
+            payment_id, 
+            status, 
+            previous_status, 
+            changed_by, 
+            change_reason, 
+            metadata
+        ) VALUES (
+            NEW.id,
+            NEW.status,
+            OLD.status,
+            NULL, -- changed_by will be set by application
+            'Status changed from ' || OLD.status || ' to ' || NEW.status,
+            jsonb_build_object(
+                'old_status', OLD.status,
+                'new_status', NEW.status,
+                'updated_at', NEW.updated_at,
+                'payment_details', jsonb_build_object(
+                    'user_id', NEW.user_id,
+                    'order_id', NEW.order_id,
+                    'amount', NEW.amount,
+                    'currency', NEW.currency,
+                    'payment_method_id', NEW.payment_method_id,
+                    'idempotency_key', NEW.idempotency_key
+                ),
+                'order_details', COALESCE(NEW.gateway_response->'metadata'->'order', '{}'::jsonb),
+                'user_details', COALESCE(NEW.gateway_response->'metadata'->'user', '{}'::jsonb)
+            )
+        );
+    END IF;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Trigger to create payment history entries
+CREATE TRIGGER create_payment_history_trigger
+    AFTER UPDATE ON payments
+    FOR EACH ROW EXECUTE FUNCTION create_payment_history_entry();
 
 CREATE TRIGGER update_refunds_updated_at 
     BEFORE UPDATE ON refunds 

@@ -52,6 +52,170 @@ Create a `.env` file in the root if needed for environment configuration.
 
 ---
 
+## Database Scalability & Compliance
+
+This payment service implements a comprehensive partitioning, archiving, and read-replica strategy for scalability, compliance, and performance.
+
+### Key Features
+
+- **Range Partitioning**: Payments and refunds partitioned by `created_at` for optimal performance
+- **Automatic Archival**: Performance (49,999 row threshold) and compliance (1-year retention) archival
+- **Read-Replica Support**: Separate read/write connection pools with consistency guarantees
+- **Idempotency & Retry**: Safe retry logic with idempotency keys
+- **Compliance Reporting**: 7-year retention for audit and reporting
+
+### Database Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run backfill` | Migrate data to partitioned tables |
+| `npm run backfill:dry-run` | Dry-run data migration |
+| `npm run optimize-indexes` | Analyze and optimize database indexes |
+| `npm run optimize-indexes:create` | Create recommended indexes |
+| `npm run test:scalability` | Run comprehensive scalability tests |
+| `npm run test:scalability:load` | Run load tests with 50k requests |
+| `npm run test:scalability:dry-run` | Dry-run scalability tests |
+| `npm run test:e2e` | Run comprehensive end-to-end tests |
+| `npm run test:e2e:no-cleanup` | Run tests without cleanup |
+| `npm run test:e2e:dry-run` | Dry-run end-to-end tests |
+| `npm run setup` | Complete automated setup |
+| `npm run setup:dry-run` | Dry-run complete setup |
+| `npm run setup:no-tests` | Setup without running tests |
+
+### Environment Variables
+
+```bash
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=payment_service
+DB_USER=postgres
+DB_PASSWORD=password
+
+# Read/Write Pool Configuration
+DB_WRITE_HOST=localhost
+DB_WRITE_PORT=5432
+DB_WRITE_NAME=payment_service
+DB_WRITE_USER=postgres
+DB_WRITE_PASSWORD=password
+
+DB_READ_HOST=localhost
+DB_READ_PORT=5432
+DB_READ_NAME=payment_service
+DB_READ_USER=postgres
+DB_READ_PASSWORD=password
+
+# Pool Sizing
+DB_WRITE_POOL_MAX=20
+DB_WRITE_POOL_MIN=5
+DB_READ_POOL_MAX=50
+DB_READ_POOL_MIN=10
+
+# Consistency Settings
+DB_MAX_LAG_SECONDS=5
+DB_READ_AFTER_WRITE_DELAY=1000
+
+# Archival Configuration
+ARCHIVAL_ENABLED=true
+PERFORMANCE_THRESHOLD=49999
+PERFORMANCE_ARCHIVE_COUNT=20000
+COMPLIANCE_RETENTION_YEARS=1
+REPORTS_RETENTION_YEARS=7
+```
+
+### Quick Start
+
+#### Option 1: Complete Automated Setup (Recommended)
+```bash
+# Complete end-to-end setup with all features
+npm run setup
+
+# Dry-run to see what would be executed
+npm run setup:dry-run
+
+# Setup without running tests
+npm run setup:no-tests
+```
+
+#### Option 2: Manual Step-by-Step Setup
+1. **Run Partitioning Migration**:
+   ```bash
+   # Apply partitioning schema
+   psql -d payment_service -f db/migrations/V001_enable_partitioning.sql
+   
+   # Run archival jobs
+   psql -d payment_service -f jobs/archiveClosedPayments.sql
+   
+   # Setup helper functions
+   psql -d payment_service -f src/db/roHelpers.sql
+   ```
+
+2. **Migrate Existing Data**:
+   ```bash
+   # Dry-run first
+   npm run backfill:dry-run
+   
+   # Execute migration
+   npm run backfill
+   ```
+
+3. **Optimize Indexes**:
+   ```bash
+   # Analyze current indexes
+   npm run optimize-indexes
+   
+   # Create recommended indexes
+   npm run optimize-indexes:create
+   ```
+
+4. **Test Everything**:
+   ```bash
+   # Run end-to-end tests
+   npm run test:e2e
+   
+   # Run scalability tests
+   npm run test:scalability
+   
+   # Run load tests
+   npm run test:scalability:load
+   ```
+
+### API Endpoints with Retry Support
+
+#### Create Payment with Retry
+```bash
+POST /payments
+Content-Type: application/json
+
+{
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "order_id": "order-123",
+  "amount": 1000,
+  "currency": "USD",
+  "retry": true,
+  "idempotency_key": "payment-123-retry"
+}
+```
+
+#### Get Payments with Pagination
+```bash
+GET /payments?limit=50&offset=0&status=SUCCEEDED&user_id=550e8400-e29b-41d4-a716-446655440000
+```
+
+#### Get User Payments
+```bash
+GET /payments/user/550e8400-e29b-41d4-a716-446655440000?limit=50&offset=0
+```
+
+### Monitoring & Compliance
+
+- **Archival Status**: `SELECT * FROM get_archival_status();`
+- **Data Integrity**: `SELECT * FROM verify_archival_integrity();`
+- **Performance Monitoring**: `SELECT * FROM partition_sizes;`
+- **Compliance Reports**: See `docs/Archival-Verification.md`
+
+---
+
 ## ESLint
 
 * ESLint configuration uses the new `eslint.config.js` format.

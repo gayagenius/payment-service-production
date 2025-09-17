@@ -1,6 +1,6 @@
 import express from 'express';
 const router = express.Router();
-import { connect } from '../../messaging/queueSetup.js';
+import { connect } from '../messaging/queueSetup.js';
 
 router.get('/health', async (req, res) => {
   try {
