@@ -2,19 +2,18 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "**" ]  # Run on main and all branches
   pull_request:
     branches: [ "main" ]
 
 permissions:
   contents: read
-  packages: write   # 👈 required for pushing to GHCR with GITHUB_TOKEN
+  packages: write   # required for pushing to GHCR with GITHUB_TOKEN
 
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
 
     steps:
       - uses: actions/checkout@v3
@@ -27,7 +26,6 @@ jobs:
   test:
     name: Tests
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     needs: lint
 
     steps:
@@ -41,7 +39,6 @@ jobs:
   build-check:
     name: Build (Check only)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     needs: test
 
     steps:
@@ -65,7 +62,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }} # or use secrets.CR_PAT if you prefer
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and Push Docker image
         uses: docker/build-push-action@v4
