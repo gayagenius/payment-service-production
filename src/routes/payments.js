@@ -1,4 +1,5 @@
 import express from 'express';
+import { publishPaymentEvent } from '../messaging/publishPaymentEvent.js';
 
 const router = express.Router();
 
@@ -11,11 +12,25 @@ router.get('/', (req, res) => {
 });
 
 // POST /payments - Create a new payment
-router.post('/', (req, res) => {
-    res.json({
-        message: 'Create payment',
-        data: req.body
-    });
+router.post('/', async (req, res) => {
+    try {
+        const paymentData = {
+            paymentId: `pay_${Date.now()}`,
+            orderId: req.body.order_id,
+            userId: req.body.user_id,
+            amount: req.body.amount,
+            currency: req.body.currency,
+            method: req.body.payment_method_id,
+            status: 'PENDING',
+            correlationId: `corr_${Date.now()}`
+        };
+        
+        await publishPaymentEvent('payment_initiated', paymentData);
+        
+    res.json({ success: true, payment: paymentData });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // GET /payments/:id - Get payment by ID
