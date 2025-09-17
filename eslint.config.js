@@ -1,15 +1,23 @@
+// eslint.config.js
+import eslintPlugin from '@typescript-eslint/eslint-plugin'
+import parser from '@typescript-eslint/parser'
+
 export default [
   {
-    files: ["*.js", "*.ts"],
+    files: ['**/*.ts'],
     languageOptions: {
-      ecmaVersion: "latest",
-      sourceType: "module",
+      parser,
+      parserOptions: {
+        project: './tsconfig.json',
+        sourceType: 'module'
+      }
+    },
+    plugins: {
+      '@typescript-eslint': eslintPlugin
     },
     rules: {
-      "no-unused-vars": "warn",
-      "no-console": "off",
-      // add more rules as needed
-    },
-    ignores: ["node_modules/**"]
+      '@typescript-eslint/no-unused-vars': 'warn',
+      '@typescript-eslint/no-explicit-any': 'warn'
+    }
   }
-];
+]
