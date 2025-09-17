@@ -10,7 +10,9 @@
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "outDir": "dist",
-    "types": ["node", "vitest/globals"]
+    "types": ["node", "vitest/globals"],
+    "resolveJsonModule": true,
+    "noEmit": false
   },
   "include": ["src", "test", "types"],
   "exclude": ["node_modules", "dist"]
