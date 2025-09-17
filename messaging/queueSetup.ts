@@ -1,5 +1,9 @@
 import amqp from 'amqplib';
 import { setTimeout } from 'timers/promises';
+export function publish(eventType, payload) {
+  // logic to send message to queue
+}
+
 
 const RABBITMQ_HOST = process.env.RABBITMQ_HOST || 'localhost';
 const RABBITMQ_USER = process.env.RABBITMQ_USER || 'guest';
