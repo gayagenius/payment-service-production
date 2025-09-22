@@ -1,16 +1,15 @@
-// src/services/paymentsService.js
-import { publish, PAYMENT_TOPICS } from '../messaging/queueSetup.js';
-import db from '../db/connectionPool.js';
-import { PAYMENT_CONFIG } from '../config/constants.js';
+import { publish, PAYMENT_TOPICS } from '../../messaging/queueSetup.js';
+import db from '../../db/connectionPool.js';
+import { PAYMENT_CONFIG } from '../../config/constants.js';
 
 /**
- * Creates a payment in DB (via SQL helper function) and enqueues a job for the worker
+ * Creates a payment in DB and enqueues a job for the worker
  * @param {Object} params
  * @param {string} params.userId
  * @param {string} params.orderId
  * @param {number} params.amount
  * @param {string} [params.currency='USD']
- * @param {string} idempotencyKey - must be provided in request header
+ * @param {string} idempotencyKey - in request header
  * @param {Object} [meta={}] - additional metadata
  */
 export async function createPaymentAndEnqueue(
@@ -22,7 +21,6 @@ export async function createPaymentAndEnqueue(
     throw new Error('Missing Idempotency-Key header');
   }
 
-  // Call DB function inside a transaction
   const result = await db.executeTransaction(async (client) => {
     const sql = `
       SELECT * FROM create_payment_with_history(
@@ -47,7 +45,7 @@ export async function createPaymentAndEnqueue(
     throw new Error(result?.error_message || 'Payment creation failed');
   }
 
-  // Build the job payload for the worker
+  // job payload for the worker
   const job = {
     paymentId: result.payment_id,
     orderId,

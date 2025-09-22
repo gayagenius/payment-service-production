@@ -1,49 +1,54 @@
-// src/services/stripeGateway.js
-// High-level stripe operations used by workers/services.
-// Keep calls idempotent by passing idempotencyKey in options.
-
 import stripe from './stripeClient.js';
-
 /**
- * Create a Payment Intent (or Charge depending on your flow).
- * amount: integer (minor units)
- * currency: string
- * metadata: object
- * idempotencyKey: string
+  Stripe PaymentIntent (wrapper)
+ * @param {Object} opts
+ * @param {number} opts.amount - integer (cents)
+ * @param {string} opts.currency - ISO 3-letter
+ * @param {Object} [opts.metadata]
+ * @param {string} [opts.idempotencyKey]
  */
-export async function createPaymentIntent({ amount, currency = 'usd', metadata = {}, idempotencyKey }) {
+export async function createPaymentIntent({ amount, currency = 'USD', metadata = {}, idempotencyKey } = {}) {
   const params = {
     amount,
     currency,
     metadata,
-    payment_method_types: ['card'],
-    // optionally set capture_method: 'manual' if you want separate capture flow
   };
 
-  const result = await stripe.paymentIntents.create(params, { idempotencyKey });
-  return result;
+  const intent = await stripe.paymentIntents.create(params, {
+    idempotencyKey,
+  });
+
+  return intent;
 }
 
 /**
- * Capture a paymentIntent (if you used manual capture)
+ * Refund a charge
+ * @param {Object} opts
+ * @param {string} opts.chargeId
+ * @param {number} [opts.amount]
+ * @param {string} [opts.idempotencyKey]
  */
-export async function capturePaymentIntent(paymentIntentId, { idempotencyKey } = {}) {
-  return stripe.paymentIntents.capture(paymentIntentId, {}, { idempotencyKey });
+export async function refundCharge({ chargeId, amount, idempotencyKey } = {}) {
+  const params = {
+    charge: chargeId,
+  };
+  if (typeof amount === 'number') params.amount = amount;
+
+  const refund = await stripe.refunds.create(params, {
+    idempotencyKey,
+  });
+
+  return refund;
 }
 
-/**
- * Refund a charge (chargeId is stripe charge id)
- */
-export async function refundCharge({ chargeId, amount, idempotencyKey }) {
-  const opts = {};
-  if (idempotencyKey) opts.idempotencyKey = idempotencyKey;
-  return stripe.refunds.create({ charge: chargeId, amount }, opts);
-}
 
 /**
- * Verify a webhook signature and return the parsed event.
- * Throws on invalid signature.
+ * Construct and verify Stripe webhook event 
+ * @param {Buffer} rawBody - raw request body
+ * @param {string} signature - Stripe signature header
+ * @param {string} secret - webhook signing secret
+ * @returns {Object} Stripe event
  */
-export function constructWebhookEvent(rawBody, sigHeader, webhookSecret) {
-  return stripe.webhooks.constructEvent(rawBody, sigHeader, webhookSecret);
+export function constructWebhookEvent(rawBody, signature, secret) {
+  return stripe.webhooks.constructEvent(rawBody, signature, secret);
 }
