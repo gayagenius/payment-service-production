@@ -1,7 +1,6 @@
-// metrics/rateLimitMetrics.js
 import prometheus from 'prom-client';
 
-// Create a Registry
+// Registry Instance
 const register = new prometheus.Registry();
 
 // Rate limiting metrics

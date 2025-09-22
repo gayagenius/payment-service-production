@@ -1,6 +1,3 @@
-// metrics/stripeMetrics.js
-// Prometheus metrics for Stripe operations
-
 import client from 'prom-client';
 
 const registry = client.register;
