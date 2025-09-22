@@ -24,7 +24,7 @@ let connection = null;
 let channel = null;
 
 /**
- * Connects to RabbitMQ with exponential backoff retry mechanism
+ * Connects to RabbitMQ with exponential backoff retry 
  * @param {number} retries - Number of retries remaining
  * @param {number} baseDelay - Base delay in milliseconds
  */
@@ -44,7 +44,7 @@ export const connect = async (retries = 5, baseDelay = 1000) => {
       connection = await amqp.connect(uri);
       channel = await connection.createChannel();
 
-      // Set up connection event handlers
+      // event handlers
       connection.on("error", (err) => {
         console.error("RabbitMQ connection error:", err);
         connection = null;
@@ -57,13 +57,13 @@ export const connect = async (retries = 5, baseDelay = 1000) => {
         channel = null;
       });
 
-      // Assert main exchange for payment events
+      // main exchange for payment events
       await channel.assertExchange(EXCHANGE_NAME, "topic", {
         durable: true,
         autoDelete: false,
       });
 
-      // Assert Dead Letter Queue setup
+      //  Dead Letter Queue setup
       await channel.assertExchange(DLQ_EXCHANGE, "direct", {
         durable: true,
         autoDelete: false,
@@ -80,7 +80,7 @@ export const connect = async (retries = 5, baseDelay = 1000) => {
 
       await channel.bindQueue(DLQ_QUEUE, DLQ_EXCHANGE, "dead_letter");
 
-      // webhook processing queue with DLQ configuration
+      // webhook processing queue with DLQ 
       const webhookQueue =
         process.env.RABBITMQ_QUEUE || "payment_webhooks_queue";
       await channel.assertQueue(webhookQueue, {
@@ -199,7 +199,7 @@ export const subscribe = async (topic, handler, options = {}) => {
     ...options,
   };
 
-  // Set prefetch count for back-pressure
+  // prefetch count for back-pressure
   await channel.prefetch(consumerOptions.prefetch);
 
   console.log(`Subscribing to topic: ${topic} (queue: ${queueName})`);
