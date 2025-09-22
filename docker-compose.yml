@@ -22,15 +22,22 @@ services:
       RABBITMQ_DEFAULT_PASS: guest
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+
+  redis:
+    image: redis:7-alpine
+    container_name: payment-service-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
   
   app:
     build: .
-    container_name: payment-service-app
+    container_name: payment-service
     depends_on:
       - db
       - rabbitmq
     ports:
-      - "3000:3000"
+      - "8080:8080"
     environment:
       NODE_ENV: development
       DB_HOST: db
