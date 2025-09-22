@@ -1,10 +1,12 @@
+import 'dotenv/config';
 import express from "express";
 import bodyParser from "body-parser";
-import payments from "./routes/payments.js";
-import refunds from "./routes/refunds.js";
-import methods from "./routes/methods.js";
-import queueHealthRouter from "./routes/queueHealth.js"
-import testRouter from "./routes/test.js"; 
+import payments from "../routes/payments.js";
+import refunds from "../routes/refunds.js";
+import methods from "../routes/methods.js";
+import paymentHistory from "../routes/paymentHistory.js";
+import queueHealthRouter from "../routes/queueHealth.js"
+import testRouter from "../routes/test.js"; 
 import { connect } from "../messaging/queueSetup.js";
 import('./../docs-server.js');
 
@@ -15,6 +17,7 @@ app.use(bodyParser.json());
 app.use("/payments", payments);
 app.use("/refunds", refunds);
 app.use("/methods", methods);
+app.use("/payment-history", paymentHistory);
 app.use("/queue", queueHealthRouter); 
 app.use("/test", testRouter);
 
