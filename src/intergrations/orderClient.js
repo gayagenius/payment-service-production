@@ -1,9 +1,3 @@
-// src/integrations/orderClient.js
-// Lightweight HTTP client to call Order service for synchronous notifications (fallback only).
-// The recommended path is to publish to payment_events and let Order consume.
-//
-// This client uses axios and the existing circuit-breaker util to guard calls.
-
 import axios from 'axios';
 import { createCircuitBreaker } from '../utils/circuitBreaker.js';
 import { retry } from '../utils/retry.js';
@@ -20,10 +14,8 @@ const axiosInstance = axios.create({
   },
 });
 
-/**
- * notifyOrderPaymentCompleted - synchronous call to Order service to mark order paid.
- * This is a fallback approach; prefer event-driven.
- */
+// notifyOrderPaymentCompleted - synchronous call to Order service to mark order paid.
+ 
 async function notifyOrderPaymentCompleted(payload) {
   // payload: { orderId, paymentId, amount, currency, gatewayResponse }
   const res = await axiosInstance.post(`/orders/${payload.orderId}/payments`, payload);
@@ -37,6 +29,5 @@ const breaker = createCircuitBreaker(notifyOrderPaymentCompleted, {
 });
 
 export async function notifyOrder(payload) {
-  // wrap with retry + circuit
-  return retry(async () => breaker.fire(payload), { retries: 2, factor: 2, minTimeout: 200 });
+    return retry(async () => breaker.fire(payload), { retries: 2, factor: 2, minTimeout: 200 });
 }

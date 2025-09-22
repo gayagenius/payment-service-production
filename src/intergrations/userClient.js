@@ -1,5 +1,4 @@
-// src/integrations/userClient.js
-// Simple client to call User service for notifications (e.g., add payment method) or to validate user state.
+// call User service for notifications (e.g., add payment method) and to validate user state.
 
 import axios from 'axios';
 import { createCircuitBreaker } from '../utils/circuitBreaker.js';
