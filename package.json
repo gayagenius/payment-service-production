@@ -8,6 +8,7 @@
     "lint": "eslint . --ext .js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "build": "echo 'JavaScript build - no compilation needed' && npm run lint && npm test",
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
     "docs": "node docs-server.js",
