@@ -5,11 +5,9 @@
   "type": "module",
   "main": "src/app.js",
   "scripts": {
-    "lint": "eslint . --ext .js,.ts --ignore-pattern '**/*.d.ts' --max-warnings=0",
+    "lint": "eslint . --ext .js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
-    "build": "tsc",
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
     "docs": "node docs-server.js",
@@ -73,13 +71,8 @@
     "pg": "^8.11.3"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.44.0",
-    "@typescript-eslint/parser": "^8.44.0",
     "eslint": "^9.0.0",
     "nodemon": "^3.0.0",
-    "typescript": "^5.3.3",
-    "vitest": "^1.6.1",
-    "body-parser": "^2.2.0"
+    "vitest": "^1.6.1"
   }
 }

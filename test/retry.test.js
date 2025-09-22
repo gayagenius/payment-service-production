@@ -12,8 +12,7 @@ describe('retry utility (p-retry wrapper)', () => {
 
     const result = await retry(fn, { retries: 5 });
 
-    expect(result).toBe('ok');76543
-    
+    expect(result).toBe('ok');
     expect(attempts).toBe(3);
   });
 

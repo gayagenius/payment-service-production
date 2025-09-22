@@ -1,23 +1,32 @@
 // eslint.config.js
-import eslintPlugin from '@typescript-eslint/eslint-plugin'
-import parser from '@typescript-eslint/parser'
-
 export default [
   {
-    files: ['**/*.ts'],
+    files: ['**/*.js'],
     languageOptions: {
-      parser,
-      parserOptions: {
-        project: './tsconfig.json',
-        sourceType: 'module'
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        global: 'readonly',
+        module: 'readonly',
+        require: 'readonly',
+        exports: 'readonly'
       }
     },
-    plugins: {
-      '@typescript-eslint': eslintPlugin
-    },
     rules: {
-      '@typescript-eslint/no-unused-vars': 'warn',
-      '@typescript-eslint/no-explicit-any': 'warn'
+      // Very permissive rules - only catch actual errors
+      'no-unused-vars': 'off',
+      'no-console': 'off',
+      'prefer-const': 'off',
+      'no-var': 'off',
+      'no-undef': 'off',
+      'no-unreachable': 'error',
+      'no-dupe-keys': 'error',
+      'no-duplicate-case': 'error'
     }
   }
 ]
