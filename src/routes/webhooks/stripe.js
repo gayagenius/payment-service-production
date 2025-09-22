@@ -7,13 +7,13 @@ import { publish } from '../../../messaging/queueSetup.js';
 
 const router = express.Router();
 
-// Queue name used to reliably process webhook events (worker will handle them)
+// Queue name used to reliably process webhook events 
 const STRIPE_WEBHOOK_QUEUE = process.env.STRIPE_WEBHOOK_QUEUE || 'stripe_webhook_events';
 
-// Use express.raw in route registration (we do it here to be explicit)
+// Use express.raw in route registration 
 router.post('/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
-  const raw = req.body; // Buffer from express.raw
+  const raw = req.body;
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
 
   if (!secret) {
@@ -31,19 +31,15 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
 
   try {
     // publish to a durable queue for processing by workers
-    // store minimal info — workers can fetch more details if needed
     await publish(STRIPE_WEBHOOK_QUEUE, {
       id: event.id,
       type: event.type,
       created: event.created,
-      payload: event, // optional: you may choose to store only event.data.object
+      payload: event, 
     });
-
-    // respond quickly to Stripe
     return res.status(200).json({ received: true });
   } catch (err) {
     console.error('[webhook] failed to publish webhook event', err);
-    // 500 so Stripe will retry delivery
     return res.status(500).send('failed to enqueue webhook');
   }
 });
