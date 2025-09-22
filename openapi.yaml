@@ -1,0 +1,1678 @@
+openapi: 3.0.3
+info:
+  title: Payment Service API
+  description: |
+    A payment gateway service that handles payments, refunds, and payment methods.
+    This service provides a simulation mode for testing payment flows without real payment processors.
+    
+    ## Authentication
+    All endpoints require Bearer JWT authentication.
+    
+    ## Idempotency
+    POST endpoints for payments and refunds support idempotency via the `Idempotency-Key` header.
+    
+    ## Rate Limiting
+    - 100 requests per minute per user
+    - 60 requests per minute per IP address
+    
+  version: 1.0.0
+  contact:
+    name: Payment Service Team
+    email: payments@group1.com
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+security:
+  - bearerAuth: []
+
+paths:
+  /payments:
+    post:
+      summary: Create a new payment
+      description: |
+        Process a new payment transaction. The payment will be simulated and may succeed or fail randomly.
+        Supports idempotency via the `Idempotency-Key` header and retry functionality via the `retry` boolean field.
+        When `retry: true`, the system will use the idempotency key to safely retry an existing payment.
+      operationId: createPayment
+      tags:
+        - Payments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          description: Unique key for idempotent requests
+          required: false
+          schema:
+            type: string
+            maxLength: 255
+        - name: X-Request-Id
+          in: header
+          description: Request correlation ID
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentCreateRequest'
+            examples:
+              card_payment:
+                summary: Card payment example
+                value:
+                  amount: 2500
+                  currency: "KES"
+                  paymentMethodId: "550e8400-e29b-41d4-a716-446655440000"
+                  retry: false
+                  metadata:
+                    order:
+                      id: "order_123"
+                      description: "Purchase of premium subscription"
+                      items: ["Premium Plan", "Extra Storage"]
+                      totalItems: 2
+                      shippingAddress: "Nairobi, Kenya"
+                    user:
+                      id: "550e8400-e29b-41d4-a716-446655440000"
+                      email: "user@example.com"
+                      name: "John Doe"
+                      phone: "+254712345678"
+              one_time_payment:
+                summary: One-time payment method
+                value:
+                  amount: 1000
+                  currency: "EUR"
+                  paymentMethod:
+                    type: "CARD"
+                    token: "tok_1234567890abcdef"
+                    brand: "VISA"
+                    last4: "4242"
+                  retry: false
+                  metadata:
+                    order:
+                      id: "order_456"
+                      description: "Digital product purchase"
+                      items: ["E-book", "Video Course"]
+                      totalItems: 2
+                      shippingAddress: "Digital Delivery"
+                    user:
+                      id: "550e8400-e29b-41d4-a716-446655440001"
+                      email: "jane@example.com"
+                      name: "Jane Smith"
+                      phone: "+33123456789"
+              retry_payment:
+                summary: Retry payment example
+                value:
+                  amount: 2500
+                  currency: "KES"
+                  paymentMethodId: "550e8400-e29b-41d4-a716-446655440000"
+                  retry: true
+                  idempotencyKey: "payment-user123-order456-1234567890"
+                  metadata:
+                    order:
+                      id: "order_456"
+                      description: "Retry failed payment"
+                      items: ["Premium Plan"]
+                      totalItems: 1
+                      shippingAddress: "Nairobi, Kenya"
+                    user:
+                      id: "550e8400-e29b-41d4-a716-446655440000"
+                      email: "user@example.com"
+                      name: "John Doe"
+                      phone: "+254712345678"
+      responses:
+        '201':
+          description: Payment created successfully
+          headers:
+            X-Request-Id:
+              description: Echoed request correlation ID
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+              examples:
+                success:
+                  summary: Successful payment
+                  value:
+                    data:
+                      id: "550e8400-e29b-41d4-a716-446655440001"
+                      userId: "550e8400-e29b-41d4-a716-446655440000"
+                      orderId: "order_123"
+                      amount: 2500
+                      currency: "KES"
+                      status: "SUCCEEDED"
+                      paymentMethodId: "550e8400-e29b-41d4-a716-446655440000"
+                      gatewayResponse:
+                        transactionId: "txn_1234567890"
+                        processorResponse: "approved"
+                      idempotencyKey: "idem_1234567890"
+                      retry: false
+                      metadata:
+                        order:
+                          id: "order_123"
+                          description: "Purchase of premium subscription"
+                          items: ["Premium Plan", "Extra Storage"]
+                          totalItems: 2
+                          shippingAddress: "Nairobi, Kenya"
+                        user:
+                          id: "550e8400-e29b-41d4-a716-446655440000"
+                          email: "user@example.com"
+                          name: "John Doe"
+                          phone: "+254712345678"
+                      createdAt: "2024-01-15T10:30:00Z"
+                      updatedAt: "2024-01-15T10:30:00Z"
+                    metadata:
+                      status: 201
+                      correlation_id: "abc-123-xyz"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Idempotency key conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                idempotency_conflict:
+                  summary: Idempotency key already used
+                  value:
+                    status: "CONFLICT"
+                    message: "Idempotency key already used"
+                    details:
+                      existingPaymentId: "550e8400-e29b-41d4-a716-446655440001"
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /payments/{id}:
+    get:
+      summary: Get payment details
+      description: Retrieve detailed information about a specific payment
+      operationId: getPayment
+      tags:
+        - Payments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Payment ID
+          schema:
+            type: string
+            format: uuid
+        - name: X-Request-Id
+          in: header
+          description: Request correlation ID
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Payment details retrieved successfully
+          headers:
+            X-Request-Id:
+              description: Echoed request correlation ID
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /payments/{id}/refund:
+    post:
+      summary: Create a refund for a payment
+      description: |
+        Create a refund for an existing payment. The refund amount cannot exceed the original payment amount.
+        Supports idempotency via the `Idempotency-Key` header.
+      operationId: createRefund
+      tags:
+        - Payments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Payment ID to refund
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          description: Unique key for idempotent requests
+          required: false
+          schema:
+            type: string
+            maxLength: 255
+        - name: X-Request-Id
+          in: header
+          description: Request correlation ID
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundCreateRequest'
+            examples:
+              full_refund:
+                summary: Full refund
+                value:
+                  amount: 2500
+                  reason: "Customer requested cancellation"
+              partial_refund:
+                summary: Partial refund
+                value:
+                  amount: 1000
+                  reason: "Defective product return"
+      responses:
+        '201':
+          description: Refund created successfully
+          headers:
+            X-Request-Id:
+              description: Echoed request correlation ID
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Refund'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Idempotency key conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /payments/user/{userId}:
+    get:
+      summary: List payments for a user
+      description: |
+        Retrieve a paginated list of payments for a specific user.
+        Results are ordered by creation date (newest first).
+      operationId: listUserPayments
+      tags:
+        - Payments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          description: Number of payments to return (1-100)
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          description: Cursor for pagination
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter by payment status
+          required: false
+          schema:
+            type: string
+            enum: [PENDING, AUTHORIZED, SUCCEEDED, FAILED, REFUNDED, PARTIALLY_REFUNDED, CANCELLED]
+        - name: X-Request-Id
+          in: header
+          description: Request correlation ID
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Payments retrieved successfully
+          headers:
+            X-Request-Id:
+              description: Echoed request correlation ID
+              schema:
+                type: string
+            X-Total-Count:
+              description: Total number of payments (when available)
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentListResponse'
+              examples:
+                paginated_payments:
+                  summary: Paginated payments list
+                  value:
+                    data:
+                      - id: "550e8400-e29b-41d4-a716-446655440001"
+                        userId: "550e8400-e29b-41d4-a716-446655440000"
+                        orderId: "order_123"
+                        amount: 2500
+                        currency: "KES"
+                        status: "SUCCEEDED"
+                        paymentMethodId: "550e8400-e29b-41d4-a716-446655440000"
+                        createdAt: "2024-01-15T10:30:00Z"
+                        updatedAt: "2024-01-15T10:30:00Z"
+                    nextCursor: "eyJjcmVhdGVkQXQiOiIyMDI0LTAxLTE0VDEwOjMwOjAwWiIsImlkIjoiNTUwZTg0MDAtZTI5Yi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIn0="
+                    count: 1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /payment/types:
+    get:
+      summary: Get available payment method types
+      description: |
+        Retrieve all available payment method types that can be used for payments.
+        This endpoint returns the master catalog of supported payment methods with their
+        configuration details including required fields and validation rules.
+      operationId: getPaymentMethodTypes
+      tags:
+        - Payments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: active
+          in: query
+          description: Filter by active status (true/false). Defaults to true if not specified.
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: sort
+          in: query
+          description: Sort order for results
+          required: false
+          schema:
+            type: string
+            enum: [name, code]
+            default: name
+        - name: limit
+          in: query
+          description: Maximum number of payment types to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          description: Cursor for pagination (use the id from the last item in previous response)
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Payment method types retrieved successfully
+          headers:
+            X-Total-Count:
+              description: Total number of payment method types available
+              schema:
+                type: integer
+                example: 3
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PaymentMethodType'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationInfo'
+              examples:
+                all_types:
+                  summary: All active payment method types
+                  value:
+                    data:
+                      - id: "550e8400-e29b-41d4-a716-446655440010"
+                        code: "CARD"
+                        name: "Credit/Debit Card"
+                        description: "Credit and debit cards including Visa, Mastercard, American Express"
+                        isActive: true
+                        requiresBrand: true
+                        requiresLast4: true
+                        iconUrl: "/icons/card.svg"
+                        sortOrder: 1
+                        createdAt: "2024-01-01T00:00:00Z"
+                        updatedAt: "2024-01-01T00:00:00Z"
+                      - id: "550e8400-e29b-41d4-a716-446655440011"
+                        code: "WALLET"
+                        name: "Digital Wallet"
+                        description: "Digital wallets like Apple Pay, Google Pay, PayPal"
+                        isActive: true
+                        requiresBrand: false
+                        requiresLast4: false
+                        iconUrl: "/icons/wallet.svg"
+                        sortOrder: 2
+                        createdAt: "2024-01-01T00:00:00Z"
+                        updatedAt: "2024-01-01T00:00:00Z"
+                      - id: "550e8400-e29b-41d4-a716-446655440012"
+                        code: "BANK_TRANSFER"
+                        name: "Bank Transfer"
+                        description: "Direct bank transfers and ACH payments"
+                        isActive: true
+                        requiresBrand: false
+                        requiresLast4: false
+                        iconUrl: "/icons/bank.svg"
+                        sortOrder: 3
+                        createdAt: "2024-01-01T00:00:00Z"
+                        updatedAt: "2024-01-01T00:00:00Z"
+                    pagination:
+                      total: 3
+                      limit: 50
+                      cursor: null
+                      hasMore: false
+                inactive_types:
+                  summary: Inactive payment method types
+                  value:
+                    data:
+                      - id: "550e8400-e29b-41d4-a716-446655440013"
+                        code: "CRYPTO"
+                        name: "Cryptocurrency"
+                        description: "Bitcoin, Ethereum and other cryptocurrencies"
+                        isActive: false
+                        requiresBrand: false
+                        requiresLast4: false
+                        iconUrl: "/icons/crypto.svg"
+                        sortOrder: 4
+                        createdAt: "2024-01-01T00:00:00Z"
+                        updatedAt: "2024-01-01T00:00:00Z"
+                    pagination:
+                      total: 1
+                      limit: 50
+                      cursor: null
+                      hasMore: false
+        '400':
+          description: Bad request - invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_sort:
+                  summary: Invalid sort parameter
+                  value:
+                    status: "BAD_REQUEST"
+                    title: "Invalid sort parameter"
+                    detail: "Sort parameter must be one of: name, code"
+                    instance: "/payments/types?sort=invalid"
+                invalid_limit:
+                  summary: Invalid limit parameter
+                  value:
+                    status: "BAD_REQUEST"
+                    title: "Invalid limit parameter"
+                    detail: "Limit must be between 1 and 100"
+                    instance: "/payments/types?limit=200"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /payments/methods:
+    post:
+      summary: Add a payment method
+      description: Add a new payment method for a user
+      operationId: addPaymentMethod
+      tags:
+        - Payments
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentMethodCreateRequest'
+            examples:
+              card_method:
+                summary: Add card payment method
+                value:
+                  userId: "550e8400-e29b-41d4-a716-446655440000"
+                  type: "CARD"
+                  details:
+                    token: "tok_1234567890abcdef"
+                    brand: "VISA"
+                    last4: "4242"
+                  isDefault: true
+              wallet_method:
+                summary: Add wallet payment method
+                value:
+                  userId: "550e8400-e29b-41d4-a716-446655440000"
+                  type: "WALLET"
+                  details:
+                    token: "wallet_1234567890abcdef"
+                    provider: "PayPal"
+                  isDefault: false
+      responses:
+        '201':
+          description: Payment method added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMethod'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /payments/methods/{userId}:
+    get:
+      summary: List payment methods for a user
+      description: Retrieve all payment methods for a specific user
+      operationId: listPaymentMethods
+      tags:
+        - Payments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Payment methods retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  methods:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PaymentMethod'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /payment-history/{paymentId}:
+    get:
+      summary: Get payment history for a specific payment
+      description: |
+        Retrieve the complete audit trail for a specific payment, including all status changes
+        and transaction history. This endpoint provides detailed information about the payment's
+        lifecycle and any modifications made to it.
+      operationId: getPaymentHistory
+      tags:
+        - Payment History
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: paymentId
+          in: path
+          description: Payment ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440001"
+      responses:
+        '200':
+          description: Payment history retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      payment_id:
+                        type: string
+                        format: uuid
+                        example: "550e8400-e29b-41d4-a716-446655440001"
+                      history:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PaymentHistoryEntry'
+              examples:
+                payment_history:
+                  summary: Payment with multiple status changes
+                  value:
+                    success: true
+                    data:
+                      payment_id: "550e8400-e29b-41d4-a716-446655440001"
+                      history:
+                        - id: "550e8400-e29b-41d4-a716-446655440002"
+                          payment_id: "550e8400-e29b-41d4-a716-446655440001"
+                          status: "SUCCEEDED"
+                          previous_status: "AUTHORIZED"
+                          changed_by: null
+                          change_reason: "Status changed from AUTHORIZED to SUCCEEDED"
+                          metadata:
+                            old_status: "AUTHORIZED"
+                            new_status: "SUCCEEDED"
+                          created_at: "2024-01-15T10:35:00Z"
+                        - id: "550e8400-e29b-41d4-a716-446655440003"
+                          payment_id: "550e8400-e29b-41d4-a716-446655440001"
+                          status: "AUTHORIZED"
+                          previous_status: "PENDING"
+                          changed_by: null
+                          change_reason: "Status changed from PENDING to AUTHORIZED"
+                          metadata:
+                            old_status: "PENDING"
+                            new_status: "AUTHORIZED"
+                          created_at: "2024-01-15T10:30:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /payment-history/user/{userId}:
+    get:
+      summary: Get payment history for a user
+      description: |
+        Retrieve payment history for all payments belonging to a specific user.
+        Results are paginated and ordered by creation date (newest first).
+      operationId: getUserPaymentHistory
+      tags:
+        - Payment History
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          description: User ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+        - name: limit
+          in: query
+          description: Number of history entries to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          description: Number of history entries to skip
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: User payment history retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      user_id:
+                        type: string
+                        format: uuid
+                        example: "550e8400-e29b-41d4-a716-446655440000"
+                      history:
+                        type: array
+                        items:
+                          allOf:
+                            - $ref: '#/components/schemas/PaymentHistoryEntry'
+                            - type: object
+                              properties:
+                                user_id:
+                                  type: string
+                                  format: uuid
+                                order_id:
+                                  type: string
+                                amount:
+                                  type: integer
+                                currency:
+                                  type: string
+                      pagination:
+                        type: object
+                        properties:
+                          limit:
+                            type: integer
+                            example: 50
+                          offset:
+                            type: integer
+                            example: 0
+                          count:
+                            type: integer
+                            example: 25
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /payment-history:
+    post:
+      summary: Create a payment history entry
+      description: |
+        Manually create a payment history entry for audit purposes.
+        This endpoint is typically used by administrators or automated systems
+        to record specific events or status changes.
+      operationId: createPaymentHistoryEntry
+      tags:
+        - Payment History
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - payment_id
+                - status
+              properties:
+                payment_id:
+                  type: string
+                  format: uuid
+                  description: Payment ID
+                  example: "550e8400-e29b-41d4-a716-446655440001"
+                status:
+                  type: string
+                  enum: [PENDING, AUTHORIZED, SUCCEEDED, FAILED, REFUNDED, PARTIALLY_REFUNDED, CANCELLED]
+                  description: New payment status
+                  example: "SUCCEEDED"
+                previous_status:
+                  type: string
+                  enum: [PENDING, AUTHORIZED, SUCCEEDED, FAILED, REFUNDED, PARTIALLY_REFUNDED, CANCELLED]
+                  description: Previous payment status
+                  example: "AUTHORIZED"
+                changed_by:
+                  type: string
+                  format: uuid
+                  description: User ID who made the change
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                change_reason:
+                  type: string
+                  description: Reason for the status change
+                  example: "Payment processed successfully"
+                metadata:
+                  type: object
+                  description: Additional metadata about the change
+                  additionalProperties: true
+                  example:
+                    processor_response: "approved"
+                    transaction_id: "txn_1234567890"
+      responses:
+        '201':
+          description: Payment history entry created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      history_id:
+                        type: string
+                        format: uuid
+                        example: "550e8400-e29b-41d4-a716-446655440002"
+                      payment_id:
+                        type: string
+                        format: uuid
+                        example: "550e8400-e29b-41d4-a716-446655440001"
+                      status:
+                        type: string
+                        example: "SUCCEEDED"
+                      previous_status:
+                        type: string
+                        example: "AUTHORIZED"
+                      changed_by:
+                        type: string
+                        format: uuid
+                        example: "550e8400-e29b-41d4-a716-446655440000"
+                      change_reason:
+                        type: string
+                        example: "Payment processed successfully"
+                      metadata:
+                        type: object
+                        example:
+                          processor_response: "approved"
+                          transaction_id: "txn_1234567890"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT Bearer token authentication. Required scopes:
+        - `payments:read` - Read payment information
+        - `payments:write` - Create and update payments
+        - `refunds:write` - Create refunds
+
+  schemas:
+    PaymentCreateRequest:
+      type: object
+      required:
+        - amount
+        - currency
+      properties:
+        amount:
+          type: integer
+          description: Amount in minor units (e.g., cents for KES)
+          minimum: 1
+          example: 2500
+        currency:
+          type: string
+          description: ISO 4217 currency code
+          pattern: '^[A-Z]{3}$'
+          example: "KES"
+        paymentMethodId:
+          type: string
+          format: uuid
+          description: ID of existing payment method
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        paymentMethod:
+          $ref: '#/components/schemas/PaymentMethodDetails'
+        orderId:
+          type: string
+          description: Associated order ID
+          example: "order_123"
+        metadata:
+          type: object
+          description: Additional metadata
+          additionalProperties: true
+          example:
+            description: "Premium subscription purchase"
+            source: "web"
+        retry:
+          type: boolean
+          description: If true, use idempotency key to retry the payment
+          default: false
+          example: false
+
+    PaymentMethodDetails:
+      type: object
+      required:
+        - type
+        - token
+      properties:
+        type:
+          type: string
+          enum: [CARD, WALLET, BANK_TRANSFER]
+          description: Payment method type
+        token:
+          type: string
+          description: Tokenized payment method reference (never raw PAN)
+          example: "tok_1234567890abcdef"
+        brand:
+          type: string
+          description: Card brand (for CARD type)
+          example: "VISA"
+        last4:
+          type: string
+          description: Last 4 digits of card number
+          pattern: '^[0-9]{4}$'
+          example: "4242"
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique payment identifier
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        userId:
+          type: string
+          format: uuid
+          description: User who made the payment
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        orderId:
+          type: string
+          nullable: true
+          description: Associated order ID
+          example: "order_123"
+        amount:
+          type: integer
+          description: Amount in minor units
+          example: 2500
+        currency:
+          type: string
+          description: ISO 4217 currency code
+          example: "KES"
+        status:
+          type: string
+          enum: [PENDING, AUTHORIZED, SUCCEEDED, FAILED, REFUNDED, PARTIALLY_REFUNDED, CANCELLED]
+          description: Payment status
+          example: "SUCCEEDED"
+        paymentMethodId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Payment method used
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        gatewayResponse:
+          type: object
+          description: Gateway response data (masked, no PAN)
+          additionalProperties: true
+          example:
+            transactionId: "txn_1234567890"
+            processorResponse: "approved"
+        idempotencyKey:
+          type: string
+          nullable: true
+          description: Idempotency key used for this payment
+          example: "idem_1234567890"
+        retry:
+          type: boolean
+          description: Whether this payment was created as a retry
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+          description: Payment creation timestamp
+          example: "2024-01-15T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2024-01-15T10:30:00Z"
+
+    RefundCreateRequest:
+      type: object
+      required:
+        - amount
+      properties:
+        amount:
+          type: integer
+          description: Refund amount in minor units
+          minimum: 1
+          example: 2500
+        reason:
+          type: string
+          description: Reason for refund
+          maxLength: 500
+          example: "Customer requested cancellation"
+
+    Refund:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique refund identifier
+          example: "550e8400-e29b-41d4-a716-446655440002"
+        paymentId:
+          type: string
+          format: uuid
+          description: Original payment ID
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        amount:
+          type: integer
+          description: Refund amount in minor units
+          example: 2500
+        currency:
+          type: string
+          description: ISO 4217 currency code
+          example: "KES"
+        status:
+          type: string
+          enum: [PENDING, SUCCEEDED, FAILED]
+          description: Refund status
+          example: "SUCCEEDED"
+        reason:
+          type: string
+          nullable: true
+          description: Refund reason
+          example: "Customer requested cancellation"
+        idempotencyKey:
+          type: string
+          nullable: true
+          description: Idempotency key used for this refund
+          example: "idem_1234567891"
+        createdAt:
+          type: string
+          format: date-time
+          description: Refund creation timestamp
+          example: "2024-01-15T11:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2024-01-15T11:00:00Z"
+
+    PaymentMethodCreateRequest:
+      type: object
+      required:
+        - userId
+        - type
+        - details
+      properties:
+        userId:
+          type: string
+          format: uuid
+          description: User ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        type:
+          type: string
+          enum: [CARD, WALLET, BANK_TRANSFER]
+          description: Payment method type
+          example: "CARD"
+        details:
+          type: object
+          description: Encrypted payment method details
+          additionalProperties: true
+          example:
+            token: "tok_1234567890abcdef"
+            brand: "VISA"
+            last4: "4242"
+        isDefault:
+          type: boolean
+          description: Whether this is the default payment method
+          default: false
+          example: true
+
+    PaymentMethod:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique payment method identifier
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        userId:
+          type: string
+          format: uuid
+          description: User ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        type:
+          type: string
+          enum: [CARD, WALLET, BANK_TRANSFER]
+          description: Payment method type
+          example: "CARD"
+        brand:
+          type: string
+          nullable: true
+          description: Card brand
+          example: "VISA"
+        last4:
+          type: string
+          nullable: true
+          description: Last 4 digits of card number
+          example: "4242"
+        isDefault:
+          type: boolean
+          description: Whether this is the default payment method
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: "2024-01-15T09:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2024-01-15T09:00:00Z"
+
+    PaymentMethodType:
+      type: object
+      description: |
+        Payment method type definition from the master catalog. This represents
+        the configuration and requirements for a specific type of payment method.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique payment method type identifier
+          example: "550e8400-e29b-41d4-a716-446655440010"
+        code:
+          type: string
+          description: Unique code for the payment method type
+          example: "CARD"
+          maxLength: 50
+        name:
+          type: string
+          description: Human-readable name of the payment method type
+          example: "Credit/Debit Card"
+          maxLength: 100
+        description:
+          type: string
+          nullable: true
+          description: Detailed description of the payment method type
+          example: "Credit and debit cards including Visa, Mastercard, American Express"
+        isActive:
+          type: boolean
+          description: Whether this payment method type is currently available
+          example: true
+        requiresBrand:
+          type: boolean
+          description: Whether this payment method type requires a brand field (e.g., VISA, MASTERCARD)
+          example: true
+        requiresLast4:
+          type: boolean
+          description: Whether this payment method type requires last 4 digits (typically for cards)
+          example: true
+        iconUrl:
+          type: string
+          nullable: true
+          description: URL to the icon representing this payment method type
+          example: "/icons/card.svg"
+          maxLength: 255
+        sortOrder:
+          type: integer
+          description: Sort order for displaying payment method types
+          example: 1
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: "2024-01-01T00:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2024-01-01T00:00:00Z"
+      required:
+        - id
+        - code
+        - name
+        - isActive
+        - requiresBrand
+        - requiresLast4
+        - sortOrder
+        - createdAt
+        - updatedAt
+
+    PaymentListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Payment'
+          description: Array of payments
+        nextCursor:
+          type: string
+          nullable: true
+          description: Cursor for next page
+          example: "eyJjcmVhdGVkQXQiOiIyMDI0LTAxLTE0VDEwOjMwOjAwWiIsImlkIjoiNTUwZTg0MDAtZTI5Yi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIn0="
+        count:
+          type: integer
+          nullable: true
+          description: Total count (when available)
+          example: 1
+
+    PaginationInfo:
+      type: object
+      description: Pagination information for list endpoints
+      properties:
+        total:
+          type: integer
+          description: Total number of items available
+          example: 25
+        limit:
+          type: integer
+          description: Maximum number of items per page
+          example: 50
+        cursor:
+          type: string
+          nullable: true
+          description: Current cursor position (null if no more pages)
+          example: "eyJjcmVhdGVkQXQiOiIyMDI0LTAxLTE0VDEwOjMwOjAwWiIsImlkIjoiNTUwZTg0MDAtZTI5Yi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIn0="
+        hasMore:
+          type: boolean
+          description: Whether there are more items available
+          example: false
+      required:
+        - total
+        - limit
+        - hasMore
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+            - status
+            - correlation_id
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code
+              example: "INVALID_CURRENCY"
+            message:
+              type: string
+              description: Human-readable error message
+              example: "Currency code must be a valid ISO 4217 code"
+            status:
+              type: integer
+              description: HTTP status code
+              example: 400
+            correlation_id:
+              type: string
+              description: Request correlation ID for tracing
+              example: "abc-123-xyz"
+            details:
+              type: object
+              description: Additional error details
+              additionalProperties: true
+              example:
+                field: "currency"
+                value: "INVALID"
+                constraint: "Must be a valid ISO 4217 currency code"
+
+    SuccessResponse:
+      type: object
+      required:
+        - data
+        - metadata
+      properties:
+        data:
+          type: object
+          description: Response payload specific to endpoint
+        metadata:
+          type: object
+          required:
+            - status
+            - correlation_id
+          properties:
+            status:
+              type: integer
+              description: HTTP status code
+              example: 200
+            correlation_id:
+              type: string
+              description: Request correlation ID for tracing
+              example: "abc-123-xyz"
+
+    PaymentHistoryEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique history entry identifier
+          example: "550e8400-e29b-41d4-a716-446655440002"
+        payment_id:
+          type: string
+          format: uuid
+          description: Payment ID this history entry belongs to
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        status:
+          type: string
+          enum: [PENDING, AUTHORIZED, SUCCEEDED, FAILED, REFUNDED, PARTIALLY_REFUNDED, CANCELLED]
+          description: Payment status at the time of this entry
+          example: "SUCCEEDED"
+        previous_status:
+          type: string
+          enum: [PENDING, AUTHORIZED, SUCCEEDED, FAILED, REFUNDED, PARTIALLY_REFUNDED, CANCELLED]
+          nullable: true
+          description: Previous payment status
+          example: "AUTHORIZED"
+        changed_by:
+          type: string
+          format: uuid
+          nullable: true
+          description: User ID who made the change
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        change_reason:
+          type: string
+          nullable: true
+          description: Reason for the status change
+          example: "Status changed from AUTHORIZED to SUCCEEDED"
+        metadata:
+          type: object
+          description: Additional metadata about the change including payment, order, and user details
+          additionalProperties: true
+          example:
+            old_status: "AUTHORIZED"
+            new_status: "SUCCEEDED"
+            updated_at: "2024-01-15T10:35:00Z"
+            payment_details:
+              user_id: "550e8400-e29b-41d4-a716-446655440000"
+              order_id: "order_123"
+              amount: 2500
+              currency: "KES"
+              payment_method_id: "550e8400-e29b-41d4-a716-446655440000"
+              idempotency_key: "idem_1234567890"
+            order_details:
+              id: "order_123"
+              description: "Purchase of premium subscription"
+              items: ["Premium Plan", "Extra Storage"]
+              totalItems: 2
+              shippingAddress: "Nairobi, Kenya"
+            user_details:
+              id: "550e8400-e29b-41d4-a716-446655440000"
+              email: "user@example.com"
+              name: "John Doe"
+              phone: "+254712345678"
+        created_at:
+          type: string
+          format: date-time
+          description: When this history entry was created
+          example: "2024-01-15T10:35:00Z"
+
+  responses:
+    BadRequest:
+      description: Bad request - Invalid request format or missing required fields
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            missing_fields:
+              summary: Missing required fields
+              value:
+                error:
+                  code: "MISSING_REQUIRED_FIELDS"
+                  message: "Missing required fields: amount, currency"
+                  status: 400
+                  correlation_id: "abc-123-xyz"
+                  details:
+                    missingFields: ["amount", "currency"]
+                    providedFields: ["orderId"]
+            invalid_json:
+              summary: Invalid JSON format
+              value:
+                error:
+                  code: "INVALID_JSON"
+                  message: "Invalid JSON format"
+                  status: 400
+                  correlation_id: "abc-123-xyz"
+                  details:
+                    error: "Unexpected token in JSON at position 15"
+
+    Unauthorized:
+      description: Unauthorized - Invalid or missing authentication
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            missing_token:
+              summary: Missing authentication token
+              value:
+                error:
+                  code: "MISSING_AUTH_TOKEN"
+                  message: "Authentication token is required"
+                  status: 401
+                  correlation_id: "abc-123-xyz"
+                  details:
+                    header: "Authorization"
+                    expectedFormat: "Bearer <token>"
+            invalid_token:
+              summary: Invalid authentication token
+              value:
+                error:
+                  code: "INVALID_AUTH_TOKEN"
+                  message: "Invalid or expired authentication token"
+                  status: 401
+                  correlation_id: "abc-123-xyz"
+                details:
+                  reason: "Token signature verification failed"
+            insufficient_scope:
+              summary: Insufficient permissions
+              value:
+                status: "UNAUTHORIZED"
+                message: "Insufficient permissions for this operation"
+                details:
+                  requiredScope: "payments:write"
+                  providedScopes: ["payments:read"]
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            payment_not_found:
+              summary: Payment not found
+              value:
+                error:
+                  code: "PAYMENT_NOT_FOUND"
+                  message: "Payment not found"
+                  status: 404
+                  correlation_id: "abc-123-xyz"
+                details:
+                  resourceType: "payment"
+                  resourceId: "550e8400-e29b-41d4-a716-446655440001"
+            payment_method_not_found:
+              summary: Payment method not found
+              value:
+                status: "NOT_FOUND"
+                message: "Payment method not found"
+                details:
+                  resourceType: "payment_method"
+                  resourceId: "550e8400-e29b-41d4-a716-446655440000"
+            user_not_found:
+              summary: User not found
+              value:
+                status: "NOT_FOUND"
+                message: "User not found"
+                details:
+                  resourceType: "user"
+                  resourceId: "550e8400-e29b-41d4-a716-446655440000"
+
+    ValidationError:
+      description: Validation error - Invalid request data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalid_currency:
+              summary: Invalid currency code
+              value:
+                error:
+                  code: "INVALID_CURRENCY"
+                  message: "Invalid currency code"
+                  status: 400
+                  correlation_id: "abc-123-xyz"
+                details:
+                  field: "currency"
+                  value: "INVALID"
+                  constraint: "Must be a valid ISO 4217 currency code (3 uppercase letters)"
+                  validExamples: ["KES", "USD", "EUR"]
+            invalid_amount:
+              summary: Invalid amount
+              value:
+                status: "VALIDATION_ERROR"
+                message: "Invalid amount"
+                details:
+                  field: "amount"
+                  value: -100
+                  constraint: "Must be a positive integer representing amount in minor units"
+                  minimum: 1
+            invalid_uuid:
+              summary: Invalid UUID format
+              value:
+                status: "VALIDATION_ERROR"
+                message: "Invalid UUID format"
+                details:
+                  field: "paymentMethodId"
+                  value: "invalid-uuid"
+                  constraint: "Must be a valid UUID v4 format"
+            refund_amount_exceeds:
+              summary: Refund amount exceeds payment amount
+              value:
+                status: "VALIDATION_ERROR"
+                message: "Refund amount exceeds available payment amount"
+                details:
+                  field: "amount"
+                  value: 5000
+                  constraint: "Must not exceed original payment amount"
+                  originalAmount: 2500
+                  currency: "KES"
+
+    Conflict:
+      description: Conflict - Resource already exists or operation not allowed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            idempotency_conflict:
+              summary: Idempotency key already used
+              value:
+                error:
+                  code: "IDEMPOTENCY_CONFLICT"
+                  message: "Idempotency key already used"
+                  status: 409
+                  correlation_id: "abc-123-xyz"
+                details:
+                  idempotencyKey: "idem_1234567890"
+                  existingResourceId: "550e8400-e29b-41d4-a716-446655440001"
+                  resourceType: "payment"
+            payment_already_refunded:
+              summary: Payment already refunded
+              value:
+                status: "CONFLICT"
+                message: "Payment has already been refunded"
+                details:
+                  paymentId: "550e8400-e29b-41d4-a716-446655440001"
+                  currentStatus: "REFUNDED"
+                  refundId: "550e8400-e29b-41d4-a716-446655440002"
+
+    RateLimited:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            user_rate_limit:
+              summary: User rate limit exceeded
+              value:
+                error:
+                  code: "RATE_LIMIT_EXCEEDED"
+                  message: "User rate limit exceeded"
+                  status: 429
+                  correlation_id: "abc-123-xyz"
+                details:
+                  limit: 100
+                  window: "1 minute"
+                  retryAfter: 45
+                  limitType: "per-user"
+            ip_rate_limit:
+              summary: IP rate limit exceeded
+              value:
+                status: "RATE_LIMITED"
+                message: "IP rate limit exceeded"
+                details:
+                  limit: 60
+                  window: "1 minute"
+                  retryAfter: 30
+                  limitType: "per-ip"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            database_error:
+              summary: Database connection error
+              value:
+                error:
+                  code: "DATABASE_ERROR"
+                  message: "Database connection failed"
+                  status: 500
+                  correlation_id: "abc-123-xyz"
+                details:
+                  requestId: "req_1234567890"
+                  error: "Connection timeout"
+            payment_processor_error:
+              summary: Payment processor error
+              value:
+                status: "INTERNAL_ERROR"
+                message: "Payment processor temporarily unavailable"
+                details:
+                  requestId: "req_1234567890"
+                  processor: "simulation"
+                  retryAfter: 30
+
+tags:
+  - name: Payments
+    description: Payment processing operations including payments, refunds, and payment methods

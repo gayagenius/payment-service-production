@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Service - Entity Relationship Diagram</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <link rel="stylesheet" href="erd-styles.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #1976d2, #1565c0);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .legend {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-left: 4px solid #1976d2;
+        }
+        
+        .legend h3 {
+            margin: 0 0 15px 0;
+            color: #1976d2;
+            font-size: 1.2rem;
+        }
+        
+        .legend-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+            display: inline-block;
+        }
+        
+        .pk { background: #27ae60; }
+        .fk { background: #f39c12; }
+        .not-null { background: #e74c3c; }
+        .unique { background: #9b59b6; }
+        .default { background: #3498db; }
+        
+        .diagram-container {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+        
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            border-top: 1px solid #e9ecef;
+        }
+        
+        .back-link {
+            display: inline-block;
+            background: #1976d2;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+        
+        .back-link:hover {
+            background: #1565c0;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🗄️ Database Schema</h1>
+            <p>Payment Service Entity Relationship Diagram</p>
+        </div>
+        
+        <div class="content">
+            <div class="legend">
+                <h3>📋 Legend</h3>
+                <div class="legend-grid">
+                    <div class="legend-item">
+                        <span class="legend-color pk"></span>
+                        <span><strong>PK</strong> - Primary Key</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color fk"></span>
+                        <span><strong>FK</strong> - Foreign Key</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color not-null"></span>
+                        <span><strong>NOT NULL</strong> - Required Field</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color unique"></span>
+                        <span><strong>UNIQUE</strong> - Unique Constraint</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color default"></span>
+                        <span><strong>DEFAULT</strong> - Default Value</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="diagram-container">
+                <div id="mermaid-diagram" class="mermaid">
+                    <!-- Diagram will be loaded from ERD.mmd file -->
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Generated from Payment Service Database Schema</p>
+            <a href="swagger-ui.html" class="back-link">← Back to API Documentation</a>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Mermaid
+        mermaid.initialize({
+            startOnLoad: false, // We'll render manually after loading the file
+            theme: 'base',
+            themeVariables: {
+                primaryColor: '#1976d2',
+                primaryTextColor: '#2c3e50',
+                primaryBorderColor: '#1565c0',
+                lineColor: '#34495e',
+                secondaryColor: '#f8f9fa',
+                tertiaryColor: '#ffffff'
+            },
+            er: {
+                diagramPadding: 20,
+                layoutDirection: 'TB',
+                minEntityWidth: 100,
+                minEntityHeight: 75,
+                entityPadding: 15,
+                stroke: '#34495e',
+                fill: '#ffffff',
+                fontSize: 12
+            }
+        });
+
+        // Load and render the ERD from the .mmd file
+        async function loadAndRenderERD() {
+            try {
+                const response = await fetch('ERD.mmd');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const mermaidCode = await response.text();
+                
+                // Insert the mermaid code into the diagram container
+                document.getElementById('mermaid-diagram').innerHTML = mermaidCode;
+                
+                // Render the diagram
+                await mermaid.init(undefined, document.getElementById('mermaid-diagram'));
+            } catch (error) {
+                console.error('Error loading ERD:', error);
+                document.getElementById('mermaid-diagram').innerHTML = 
+                    '<div style="text-align: center; padding: 40px; color: #e74c3c;">' +
+                    '<h3>Error loading ERD</h3>' +
+                    '<p>Could not load ERD.mmd file. Please ensure the file exists.</p>' +
+                    '<p>Error: ' + error.message + '</p>' +
+                    '</div>';
+            }
+        }
+
+        // Load the ERD when the page loads
+        document.addEventListener('DOMContentLoaded', loadAndRenderERD);
+    </script>
+</body>
+</html>
