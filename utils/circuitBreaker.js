@@ -1,17 +1,18 @@
 import CircuitBreaker from 'opossum';
 
 export function createCircuitBreaker(fn, options = {}) {
-  const breaker = new CircuitBreaker(fn, {
+  const defaultOpts = {
     timeout: 10000,
     errorThresholdPercentage: 50,
     resetTimeout: 30000,
-    ...options,
-  });
+  };
+  const opts = { ...defaultOpts, ...options };
+  const breaker = new CircuitBreaker(fn, opts);
 
-  breaker.on('open', () => console.log('[CircuitBreaker] OPEN'));
-  breaker.on('halfOpen', () => console.log('[CircuitBreaker] HALF_OPEN'));
-  breaker.on('close', () => console.log('[CircuitBreaker] CLOSED'));
-  breaker.on('failure', (err) => console.error(`[CircuitBreaker] failure: ${err.message}`));
+  breaker.on('open', () => console.warn('[CircuitBreaker] OPEN'));
+  breaker.on('halfOpen', () => console.warn('[CircuitBreaker] HALF_OPEN'));
+  breaker.on('close', () => console.warn('[CircuitBreaker] CLOSED'));
+  breaker.on('failure', (err) => console.error('[CircuitBreaker] failure', err && err.message));
 
   return breaker;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { retry } from '../utils/retry.js';
+import { retry } from '../../utils/retry.js';
 
 describe('retry utility (p-retry wrapper)', () => {
   it('retries a function until success', async () => {
@@ -12,7 +12,7 @@ describe('retry utility (p-retry wrapper)', () => {
 
     const result = await retry(fn, { retries: 5 });
 
-    expect(result).toBe('ok');76543
+    expect(result).toBe('ok');
     
     expect(attempts).toBe(3);
   });

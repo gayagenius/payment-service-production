@@ -1,0 +1,132 @@
+{
+  "development": {
+    "payments": {
+      "windowMs": 900000,
+      "max": 20,
+      "message": "Too many payment requests from this IP",
+      "skipSuccessfulRequests": false
+    },
+    "refunds": {
+      "windowMs": 3600000,
+      "max": 10,
+      "message": "Too many refund requests from this IP",
+      "skipSuccessfulRequests": false
+    },
+    "general": {
+      "windowMs": 900000,
+      "max": 200,
+      "message": "Too many requests from this IP",
+      "skipSuccessfulRequests": true
+    },
+    "health": {
+      "windowMs": 60000,
+      "max": 120,
+      "message": "Too many health check requests",
+      "skipSuccessfulRequests": true
+    }
+  },
+  "staging": {
+    "payments": {
+      "windowMs": 900000,
+      "max": 15,
+      "message": "Too many payment requests from this IP",
+      "skipSuccessfulRequests": false
+    },
+    "refunds": {
+      "windowMs": 3600000,
+      "max": 8,
+      "message": "Too many refund requests from this IP", 
+      "skipSuccessfulRequests": false
+    },
+    "general": {
+      "windowMs": 900000,
+      "max": 150,
+      "message": "Too many requests from this IP",
+      "skipSuccessfulRequests": true
+    },
+    "health": {
+      "windowMs": 60000,
+      "max": 100,
+      "message": "Too many health check requests",
+      "skipSuccessfulRequests": true
+    }
+  },
+  "production": {
+    "payments": {
+      "windowMs": 900000,
+      "max": 10,
+      "message": "Too many payment requests from this IP",
+      "skipSuccessfulRequests": false,
+      "standardHeaders": true,
+      "legacyHeaders": false
+    },
+    "refunds": {
+      "windowMs": 3600000,
+      "max": 5,
+      "message": "Too many refund requests from this IP",
+      "skipSuccessfulRequests": false,
+      "standardHeaders": true,
+      "legacyHeaders": false
+    },
+    "general": {
+      "windowMs": 900000,
+      "max": 100,
+      "message": "Too many requests from this IP",
+      "skipSuccessfulRequests": true,
+      "standardHeaders": true,
+      "legacyHeaders": false
+    },
+    "health": {
+      "windowMs": 60000,
+      "max": 60,
+      "message": "Too many health check requests",
+      "skipSuccessfulRequests": true,
+      "standardHeaders": true,
+      "legacyHeaders": false
+    }
+  },
+  "userTiers": {
+    "basic": {
+      "payments": {
+        "windowMs": 900000,
+        "max": 5
+      },
+      "general": {
+        "windowMs": 900000,
+        "max": 50
+      }
+    },
+    "premium": {
+      "payments": {
+        "windowMs": 900000,
+        "max": 15
+      },
+      "general": {
+        "windowMs": 900000,
+        "max": 200
+      }
+    },
+    "enterprise": {
+      "payments": {
+        "windowMs": 900000,
+        "max": 50
+      },
+      "general": {
+        "windowMs": 900000,
+        "max": 1000
+      }
+    }
+  },
+  "rateLimitHeaders": {
+    "include": [
+      "X-RateLimit-Limit",
+      "X-RateLimit-Remaining", 
+      "X-RateLimit-Reset",
+      "Retry-After"
+    ],
+    "customHeaders": {
+      "X-API-Version": "v1",
+      "X-Service": "payment-service"
+    }
+  }
+}

@@ -1,7 +1,5 @@
-// src/routes/test.js
-
 import express from "express";
-import { publishPaymentEvent } from "../messaging/publishPaymentEvent.js";
+import { publishPaymentEvent } from "../../messaging/publishPaymentEvent.js";
 
 const router = express.Router();
 
