@@ -1,8 +1,6 @@
-// tests/stripeGateway.test.js
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// mock stripe package by mocking the client module import path used in stripeGateway.js
-vi.mock('../src/services/stripeClient.js', () => {
+vi.mock('../services/stripeClient.js', () => {
   const createMock = vi.fn().mockResolvedValue({ id: 'pi_123', status: 'succeeded' });
   return {
     default: {
@@ -16,7 +14,7 @@ vi.mock('../src/services/stripeClient.js', () => {
   };
 });
 
-import { createPaymentIntent, refundCharge } from '../src/services/stripeGateway.js';
+import { createPaymentIntent, refundCharge } from '../services/stripeGateway.js';
 
 describe('stripeGateway', () => {
   it('createPaymentIntent calls stripe.paymentIntents.create with params and idempotency', async () => {

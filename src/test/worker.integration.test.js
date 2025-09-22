@@ -20,10 +20,10 @@ vi.mock('../src/services/stripeGateway.js', () => ({
 }));
 
 // import the worker module (it should register subscribe when loaded)
-import stripeWorkerModule from '../workers/stripeWorker.js';
-import { createPaymentIntent } from '../src/services/stripeGateway.js';
+import stripeWorkerModule from '../../workers/stripeWorker.js';
+import { createPaymentIntent } from '../services/stripeGateway.js';
 import { i } from 'vitest/dist/reporters-w_64AS5f.js';
-import { PAYMENT_TOPICS } from '../messaging/queueSetup.js';
+import { PAYMENT_TOPICS } from '../../messaging/queueSetup.js';
 
 describe('stripeWorker light integration', () => {
   it('registers subscription and publishes payment_completed on successful stripe call', async () => {

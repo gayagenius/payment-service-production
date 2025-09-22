@@ -1,11 +1,9 @@
-// test/payments.spec.js
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import paymentsRouter from '../src/routes/payments.js';
 
-// mocks
-vi.mock('../src/services/paymentsService.js', () => {
+// Register mocks BEFORE importing the router 
+vi.mock('../services/paymentsService.js', () => {
   return {
     createPaymentAndEnqueue: vi.fn(),
     listPayments: vi.fn(),
@@ -15,14 +13,15 @@ vi.mock('../src/services/paymentsService.js', () => {
   };
 });
 
-import * as paymentService from '../src/services/paymentsService.js';
+// import the router and the mocked service
+import paymentsRouter from '../routes/payments.js';
+import * as paymentService from '../services/paymentsService.js';
 
 let app;
 beforeEach(() => {
   app = express();
   app.use(express.json());
   app.use('/payments', paymentsRouter);
-  // minimal error handler to make tests receive JSON
   app.use((err, req, res, next) => {
     res.status(500).json({ status: 'error', message: err.message || 'err' });
   });
