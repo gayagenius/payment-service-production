@@ -48,7 +48,10 @@
     "logs": "tail -f payment-service.log",
     "clean": "rm -rf node_modules package-lock.json && npm install",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "dlq:stats": "node scripts/redrive-dlq.js stats",
+    "dlq:peek": "node scripts/redrive-dlq.js peek",
+    "dlq:redrive": "node scripts/redrive-dlq.js redrive"
   },
   "repository": {
     "type": "git",
@@ -62,15 +65,31 @@
   },
   "homepage": "https://github.com/gayagenius/payment-service-production#readme",
   "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "amqplib": "^0.10.9",
     "axios": "^1.6.0",
     "body-parser": "^2.2.0",
+    "commander": "^14.0.1",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "express-validator": "^7.2.1",
+    "helmet": "^8.1.0",
+    "ioredis": "^5.7.0",
+    "morgan": "^1.10.1",
     "opossum": "^5.0.1",
     "p-retry": "^7.0.0",
+    "pg": "^8.11.3",
+    "prom-client": "^15.1.3",
+    "prometheus-client": "^0.1.1",
+    "rate-limit-redis": "^4.2.2",
+    "stripe": "^18.5.0",
+    "supertest": "^7.1.4",
     "uuid": "^13.0.0",
-    "pg": "^8.11.3"
+    "winston": "^3.17.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -78,6 +97,7 @@
     "@typescript-eslint/parser": "^8.44.0",
     "eslint": "^9.0.0",
     "nodemon": "^3.0.0",
+    "supertest": "^7.1.4",
     "typescript": "^5.3.3",
     "vitest": "^1.6.1"
   }

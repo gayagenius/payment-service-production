@@ -1,5 +1,3 @@
-// workers/webhookProcessor.js
-
 import 'dotenv/config';
 import { retryWithBackoff } from './retryWithBackoff.js';
 import { connect } from '../messaging/queueSetup.js';

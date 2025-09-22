@@ -1,10 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import CircuitBreaker from 'opossum';
-// Correct way to type the instance:
-type CircuitBreakerType = InstanceType<typeof CircuitBreaker>;
 
 describe('integration: opossum circuit breaker', () => {
-  let breaker: CircuitBreakerType;
+  let breaker;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -53,10 +51,8 @@ describe('integration: opossum circuit breaker', () => {
     await expect(breaker.fire()).rejects.toThrow('fail');
     expect(breaker.opened).toBe(true);
 
-    // advance timers to trigger resetTimeout
     vi.advanceTimersByTime(1000);
 
-    // Let opossum emit events
     await vi.waitFor(() => {
       expect(halfOpenSpy).toHaveBeenCalled();
     });
