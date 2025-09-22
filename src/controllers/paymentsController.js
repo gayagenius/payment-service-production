@@ -1,4 +1,3 @@
-// src/controllers/paymentsController.js
 import { createPaymentAndEnqueue } from '../services/paymentsService.js';
 
 export async function createPayment(req, res, next) {
