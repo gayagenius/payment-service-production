@@ -326,8 +326,8 @@ export DB_PASSWORD=the password set for your account
    ```
 
 3. **Access the documentation:**
-   - **Swagger UI**: http://localhost:8081/docs/swagger-ui.html
-   - **ER Diagram**: http://localhost:8081/docs/erd-viewer.html
+   - **Swagger UI**: http://localhost:8889/docs/swagger-ui.html
+   - **ER Diagram**: http://localhost:8889/docs/erd-viewer.html
 
 ### Environment Variables
 
@@ -335,7 +335,7 @@ Create a `.env` file with the following variables:
 
 ```bash
 # Payment Service Configuration
-PORT=8080
+PORT=8888
 NODE_ENV=development
 
 # Database Configuration
@@ -356,19 +356,19 @@ RABBITMQ_VHOST=/
 JWT_SECRET=your-jwt-secret-key
 
 # Documentation Server (runs on different port)
-DOCS_PORT=8081
+DOCS_PORT=8889
 ```
 
 **Port Configuration:**
-- **Payment Service**: Port 8080 (main API)
-- **Documentation Server**: Port 8081 (Swagger UI, ERD)
+- **Payment Service**: Port 8888 (main API)
+- **Documentation Server**: Port 8889 (Swagger UI, ERD)
 - **RabbitMQ**: Port 5672 (message queue)
 
 ### API Endpoints
 
 #### Base URL
-- **Local Development**: `http://localhost:8080`
-- **Documentation**: `http://localhost:8081`
+- **Local Development**: `http://localhost:8888`
+- **Documentation**: `http://localhost:8889`
 
 #### Authentication
 All endpoints require Bearer JWT authentication:
