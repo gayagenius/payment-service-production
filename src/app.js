@@ -5,10 +5,10 @@ import payments from "../routes/payments.js";
 import refunds from "../routes/refunds.js";
 import methods from "../routes/methods.js";
 import paymentHistory from "../routes/paymentHistory.js";
-import queueHealthRouter from "../routes/queueHealth.js"
+import queueHealthRouter from "../routes/queueHealth.js";
 import testRouter from "../routes/test.js"; 
 import { connect } from "../messaging/queueSetup.js";
-import('./../docs-server.js');
+import('../docs-server.js');
 
 const app = express();
 app.use(bodyParser.json());
