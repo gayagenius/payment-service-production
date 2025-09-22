@@ -10,9 +10,6 @@ const program = new Command();
 // Audit log file
 const AUDIT_LOG_FILE = join(process.cwd(), 'logs', 'dlq-redrive-audit.log');
 
-/**
- * Write audit log entry
- */
 function writeAuditLog(entry) {
   const logEntry = {
     timestamp: new Date().toISOString(),
@@ -27,9 +24,6 @@ function writeAuditLog(entry) {
   }
 }
 
-/**
- * Safety checks before redriving
- */
 async function performSafetyChecks(dlqManager, options) {
   const checks = {
     queueDepth: false,
@@ -45,7 +39,7 @@ async function performSafetyChecks(dlqManager, options) {
   }
   checks.queueDepth = true;
 
-  // Check time window to prevent accidental redrives 
+  //prevents accidental redrives 
   const currentHour = new Date().getHours();
   if (options.restrictHours && !options.restrictHours.includes(currentHour)) {
     console.error(`Current time (${currentHour}:00) is outside allowed hours: ${options.restrictHours}`);
@@ -82,9 +76,9 @@ async function performSafetyChecks(dlqManager, options) {
   return true;
 }
 
-/**
- * Peek command - view messages without consuming
- */
+
+//  view messages without consuming
+
 program
   .command('peek')
   .description('Peek at messages in the DLQ without consuming them')
@@ -131,9 +125,8 @@ program
     }
   });
 
-/**
- * Stats command - get DLQ statistics
- */
+
+//  DLQ statistics
 program
   .command('stats')
   .description('Get DLQ statistics')
@@ -162,9 +155,7 @@ program
     }
   });
 
-/**
- * Redrive command - reprocess messages from DLQ
- */
+// redrive messages to DLQ queues
 program
   .command('redrive')
   .description('Redrive messages from the DLQ back to original queues')
@@ -190,7 +181,6 @@ program
         try {
           const filterCriteria = JSON.parse(options.filter);
           filterFn = (content, msg) => {
-            // Simple filter implementation - can be extended
             for (const [key, value] of Object.entries(filterCriteria)) {
               if (content[key] !== value) return false;
             }
@@ -244,7 +234,6 @@ program
         });
       }
 
-      // Write detailed audit log
       writeAuditLog({
         action: 'redrive_dlq',
         results,
@@ -276,9 +265,8 @@ program
     }
   });
 
-/**
- * Validate command - validate messages in DLQ against schemas
- */
+// validate messages in DLQ against schemas
+ 
 program
   .command('validate')
   .description('Validate messages in DLQ against event schemas')
@@ -374,9 +362,9 @@ program
     }
   });
 
-/**
- * remove all messages from DLQ 
- */
+
+//  remove all messages from DLQ 
+ 
 program
   .command('purge')
   .description('DANGER: Remove all messages from the DLQ')
