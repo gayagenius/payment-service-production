@@ -1,4 +1,3 @@
-// src/middleware/idempotency.js
 /**
  * Ensure Idempotency-Key header exists for POST /payments
  */
@@ -13,7 +12,6 @@ export default function idempotencyMiddleware(req, res, next) {
         message: 'Missing Idempotency-Key header',
       });
     }
-    // Basic format validation (string, short length)
     if (typeof key !== 'string' || key.trim().length === 0 || key.length > 255) {
       return res.status(400).json({
         status: 'error',
@@ -21,7 +19,6 @@ export default function idempotencyMiddleware(req, res, next) {
         message: 'Invalid Idempotency-Key header',
       });
     }
-    // attach to req for convenience
     req.idempotencyKey = key;
   }
   return next();

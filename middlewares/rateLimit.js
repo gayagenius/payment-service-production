@@ -1,4 +1,3 @@
-// src/middleware/rateLimiter.js
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import RedisStore from 'rate-limit-redis';
 import Redis from 'ioredis';
@@ -14,7 +13,6 @@ const redis = new Redis({
   password: process.env.REDIS_PASSWORD || undefined,
   db: Number(process.env.REDIS_DB || 0),
   retryStrategy(times) {
-    // exponential backoff capped
     const delay = Math.min(2000 * times, 30000);
     return delay;
   },
@@ -30,12 +28,11 @@ redis.on('error', (err) => {
   console.error('Redis rate limiting error:', err);
 });
 
-// attempt to connect in background (don't await here)
+// attempt to connect in background 
 (async () => {
   try {
     await redis.connect();
   } catch (err) {
-    // connection failed - we'll log and middleware will fall back
     console.warn('Could not connect to Redis for rate limiting at startup:', err.message);
   }
 })();
@@ -50,11 +47,10 @@ const rateLimitConfig = {
     message: {
       error: 'Too many payment requests',
       message: 'Maximum 10 payment attempts allowed per 15 minutes',
-      retryAfter: 15 * 60 // seconds
+      retryAfter: 15 * 60 // 15 seconds
     },
     standardHeaders: true,
     legacyHeaders: false,
-    // prefer user id when available; otherwise fallback to IP
     keyGenerator: (req) => req.user?.id || ipKeyGenerator(req)
   },
 
@@ -99,36 +95,28 @@ const rateLimitConfig = {
 };
 
 /**
- * Helper: create an express-rate-limit instance with Redis backing.
- * If Redis is unavailable, creates an in-memory limiter to avoid blocking traffic.
+ * express-rate-limit instance with Redis backing.
  */
 const createRateLimiter = (config) => {
   const store = redis.status === 'ready'
     ? new RedisStore({
         client: redis,
-        // Optional prefix so keys are namespaced
         prefix: process.env.RATE_LIMIT_REDIS_PREFIX || 'rl:',
       })
     : null;
 
   const limiter = rateLimit({
-    // use Redis store when available, otherwise fallback to default in-memory store
     ...(store ? { store } : {}),
     windowMs: config.windowMs,
     max: config.max,
     standardHeaders: config.standardHeaders,
     legacyHeaders: config.legacyHeaders,
     keyGenerator: config.keyGenerator || ((req) => ipKeyGenerator(req)),
-    // We skip successful requests in the built-in limiter to reduce storage pressure
-    skipSuccessfulRequests: true, // only count failed/other requests if desired; adjust as needed
+    skipSuccessfulRequests: true, 
     skipFailedRequests: false,
     handler: (req, res) => {
-      // log (do not leak PII)
       console.warn(`Rate limit reached for key=${(config.keyGenerator ? config.keyGenerator(req) : ipKeyGenerator(req))} path=${req.path}`);
-
       const retryAfter = Math.ceil(config.windowMs / 1000);
-
-      // set standard rate-limit headers
       res.set({
         'X-RateLimit-Limit': config.max,
         'X-RateLimit-Remaining': 0,
@@ -147,7 +135,6 @@ const createRateLimiter = (config) => {
     }
   });
 
-  // If Redis isn't ready, wrap the in-memory limiter so we log the fallback
   if (!store) {
     const originalMiddleware = limiter;
     return (req, res, next) => {
@@ -167,10 +154,6 @@ export const refundRateLimit = createRateLimiter(rateLimitConfig.refunds);
 export const generalRateLimit = createRateLimiter(rateLimitConfig.general);
 export const healthRateLimit = createRateLimiter(rateLimitConfig.health);
 
-/**
- * Sliding-window limiter using Redis sorted sets (more precise)
- * - Use on endpoints that need more accurate rate enforcement.
- */
 export const slidingWindowRateLimit = (options = {}) => {
   const {
     windowMs = 15 * 60 * 1000,
@@ -179,10 +162,8 @@ export const slidingWindowRateLimit = (options = {}) => {
     message = 'Rate limit exceeded'
   } = options;
 
-  // return express middleware
   return async (req, res, next) => {
     if (redis.status !== 'ready') {
-      // allow through if redis not ready
       return next();
     }
 
@@ -199,11 +180,9 @@ export const slidingWindowRateLimit = (options = {}) => {
       pipeline.expire(key, Math.ceil(windowMs / 1000));
       const results = await pipeline.exec();
 
-      // results[1] corresponds to zcard(key) -> [err, count]
       const currentCount = (results && results[1] && results[1][1]) ? results[1][1] : 0;
 
       if (currentCount > max) {
-        // remove the member we just added (best-effort)
         await redis.zrem(key, member);
         const retryAfter = Math.ceil(windowMs / 1000);
         res.set({
@@ -229,14 +208,12 @@ export const slidingWindowRateLimit = (options = {}) => {
       return next();
     } catch (err) {
       console.error('Sliding window limiter error:', err);
-      return next(); // fail-open
+      return next(); 
     }
   };
 };
 
-/**
- * Burst limiter (two-tier counters) to allow short bursts while enforcing longer window limits.
- */
+
 export const burstRateLimit = (options = {}) => {
   const {
     windowMs = 15 * 60 * 1000,
@@ -302,10 +279,6 @@ export const burstRateLimit = (options = {}) => {
   };
 };
 
-/**
- * Tiered rate limiter - different limits by user tier (basic/premium/enterprise)
- * Uses createRateLimiter under the hood to return a middleware.
- */
 export const tieredRateLimit = (opts = {}) => {
   const tierLimits = {
     basic: { windowMs: 15 * 60 * 1000, max: 50 },
@@ -323,8 +296,6 @@ export const tieredRateLimit = (opts = {}) => {
   };
 };
 
-// export the redis client for reuse
 export const rateLimitRedis = redis;
 
-// default export: general limiter (makes `import rateLimiter from './rateLimiter'` simple)
 export default generalRateLimit;
