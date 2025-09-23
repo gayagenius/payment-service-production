@@ -1,30 +1,29 @@
-// tests/webhook.test.js
+import 'dotenv/config'; 
 import request from 'supertest';
 import express from 'express';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // mock constructWebhookEvent and publish
-vi.mock('../src/services/stripeGateway.js', () => {
+vi.mock('../services/stripeGateway.js', () => {
   return {
     constructWebhookEvent: vi.fn(),
   };
 });
-vi.mock('../messaging/queueSetup.js', () => {
+vi.mock('../../messaging/queueSetup.js', () => {
   return {
     publish: vi.fn().mockResolvedValue('msg_1'),
   };
 });
 
-import { constructWebhookEvent } from '../src/services/stripeGateway.js';
-import { publish } from '../messaging/queueSetup.js';
+import { constructWebhookEvent } from '../services/stripeGateway.js';
+import { publish } from '../../messaging/queueSetup.js';
 
-import stripeWebhookRouter from '../src/routes/webhooks/stripe.js';
+import stripeWebhookRouter from '../routes/webhooks/stripe.js';
 
 describe('POST /webhooks/stripe', () => {
   let app;
   beforeEach(() => {
     app = express();
-    // mount raw route — supertest sends Buffer if we set content-type text/plain, so simulate
     app.use('/webhooks', stripeWebhookRouter);
   });
 
@@ -35,7 +34,7 @@ describe('POST /webhooks/stripe', () => {
     const res = await request(app)
       .post('/webhooks/stripe')
       .set('stripe-signature', 't=1,v1=abc')
-      .send(JSON.stringify(fakeEvent)) // body goes as text; express.raw will receive buffer
+      .send(JSON.stringify(fakeEvent)) 
       .set('Content-Type', 'application/json');
 
     expect(res.status).toBe(200);

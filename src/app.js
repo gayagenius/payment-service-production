@@ -114,14 +114,12 @@ app.get('/metrics', async (req, res) => {
   }
 });
 
-
 // Routes with specific rate limiting
 app.use('/payments', paymentRateLimit, collectRateLimitMetrics('payments', 'payment'), payments);
 app.use('/refunds', refundRateLimit, collectRateLimitMetrics('refunds', 'refund'), refunds);
 app.use('/methods', generalRateLimit, collectRateLimitMetrics('methods', 'general'), methods);
 app.use('/queue', healthRateLimit, collectRateLimitMetrics('queue', 'health'), queueHealthRouter);
 app.use('/test', generalRateLimit, collectRateLimitMetrics('test', 'general'), testRouter);
-
 
 // Global error handler
 app.use((error, req, res, next) => {
@@ -280,7 +278,7 @@ process.on('unhandledRejection', (reason, promise) => {
 
 
 // Start server
-const PORT = process.env.PORT || 8080;
+const PORT = 8000;
 let server;
 
 const startServer = async () => {
