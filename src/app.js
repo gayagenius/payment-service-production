@@ -28,6 +28,25 @@ app.use("/test", testRouter);
 app.use('/docs', express.static('docs'));
 app.use('/api', express.static('api'));
 
+// Return URL endpoint for Stripe redirects
+app.get('/payments/return', (req, res) => {
+  const { payment_intent, payment_intent_client_secret } = req.query;
+  
+  if (payment_intent) {
+    res.json({
+      success: true,
+      message: 'Payment completed successfully',
+      payment_intent,
+      payment_intent_client_secret
+    });
+  } else {
+    res.json({
+      success: false,
+      message: 'Payment failed or was cancelled'
+    });
+  }
+});
+
 // Health check route
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "Payment service is running 🚀" });
