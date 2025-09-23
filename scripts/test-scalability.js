@@ -427,10 +427,10 @@ async function testApiEndpoints() {
       
       // Test 3: Get payment by ID
       if (paymentResponse.status === 201 && paymentResponse.data.success) {
-        const paymentId = paymentResponse.data.data.id;
+        const payment_id = paymentResponse.data.data.id;
         
         try {
-          const getResponse = await axios.get(`${config.api.baseUrl}/payments/${paymentId}`, {
+          const getResponse = await axios.get(`${config.api.baseUrl}/payments/${payment_id}`, {
             timeout: config.api.timeout
           });
           

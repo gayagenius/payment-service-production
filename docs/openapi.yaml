@@ -640,7 +640,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /payment-history/{paymentId}:
+  /payment-history/{payment_id}:
     get:
       summary: Get payment history for a specific payment
       description: |
@@ -653,7 +653,7 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - name: paymentId
+        - name: payment_id
           in: path
           description: Payment ID
           required: true
@@ -1075,8 +1075,24 @@ components:
           format: uuid
           description: Unique refund identifier
           example: "550e8400-e29b-41d4-a716-446655440002"
-        paymentId:
+    PaymentMethod:
+      type: object
+      properties:
+        id:
           type: string
+          format: uuid
+          description: Payment method identifier
+
+        userId:
+          type: string
+          format: uuid
+          description: User who owns this payment method
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+        type:
+          type: string
+          description: Payment method type
+
           format: uuid
           description: Original payment ID
           example: "550e8400-e29b-41d4-a716-446655440001"
@@ -1610,7 +1626,7 @@ components:
                 status: "CONFLICT"
                 message: "Payment has already been refunded"
                 details:
-                  paymentId: "550e8400-e29b-41d4-a716-446655440001"
+                  payment_id: "550e8400-e29b-41d4-a716-446655440001"
                   currentStatus: "REFUNDED"
                   refundId: "550e8400-e29b-41d4-a716-446655440002"
 

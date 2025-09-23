@@ -1,0 +1,529 @@
+{
+	"info": {
+		"_postman_id": "paystack-payment-service-clean",
+		"name": "Payment Service API - Paystack",
+		"description": "Complete API collection for Payment Service with Paystack integration - clean and simplified",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health Check",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create Payment - Card",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Idempotency-Key",
+						"value": "{{$randomUUID}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"orderId\": \"order_card_{{$randomInt}}\",\n  \"amount\": 2500,\n  \"metadata\": {\n    \"user\": {\n      \"id\": \"{{user_id}}\",\n      \"email\": \"test@example.com\",\n      \"name\": \"Test User\"\n    },\n    \"order\": {\n      \"id\": \"order_card_{{$randomInt}}\",\n      \"description\": \"Card payment with Paystack\",\n      \"items\": [\"Premium Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"Premium subscription purchase\",\n    \"source\": \"web\"\n  },\n  \"retry\": false\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/payments",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"payments"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create Payment - Bank Transfer",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Idempotency-Key",
+						"value": "{{$randomUUID}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"orderId\": \"order_bank_{{$randomInt}}\",\n  \"amount\": 5000,\n  \"metadata\": {\n    \"user\": {\n      \"id\": \"{{user_id}}\",\n      \"email\": \"bank@example.com\",\n      \"name\": \"Bank User\"\n    },\n    \"order\": {\n      \"id\": \"order_bank_{{$randomInt}}\",\n      \"description\": \"Bank transfer payment\",\n      \"items\": [\"Bank Transfer Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"Bank transfer subscription\",\n    \"source\": \"web\"\n  },\n  \"retry\": false\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/payments",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"payments"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create Payment - USSD",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Idempotency-Key",
+						"value": "{{$randomUUID}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"orderId\": \"order_ussd_{{$randomInt}}\",\n  \"amount\": 1000,\n  \"metadata\": {\n    \"user\": {\n      \"id\": \"{{user_id}}\",\n      \"email\": \"ussd@example.com\",\n      \"name\": \"USSD User\",\n      \"phone\": \"+254728287616\"\n    },\n    \"order\": {\n      \"id\": \"order_ussd_{{$randomInt}}\",\n      \"description\": \"USSD payment\",\n      \"items\": [\"USSD Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"USSD subscription\",\n    \"source\": \"web\"\n  },\n  \"retry\": false\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/payments",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"payments"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get All Payments",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/payments?limit=20&offset=0",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"payments"
+					],
+					"query": [
+						{
+							"key": "limit",
+							"value": "20"
+						},
+						{
+							"key": "offset",
+							"value": "0"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Payment by ID",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/payments/{{payment_id}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"payments",
+						"{{payment_id}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get User Payments",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/payments/user/{{user_id}}?limit=20&offset=0",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"payments",
+						"user",
+						"{{user_id}}"
+					],
+					"query": [
+						{
+							"key": "limit",
+							"value": "20"
+						},
+						{
+							"key": "offset",
+							"value": "0"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create Refund",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Idempotency-Key",
+						"value": "{{$randomUUID}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"payment_id\": \"{{payment_id}}\",\n  \"amount\": 1000,\n  \"reason\": \"Customer requested refund\",\n  \"metadata\": {\n    \"refund_reason\": \"Customer not satisfied\",\n    \"processed_by\": \"admin\",\n    \"notes\": \"Full refund processed\"\n  }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/refunds",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"refunds"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Refunds",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/refunds?limit=20&offset=0",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"refunds"
+					],
+					"query": [
+						{
+							"key": "limit",
+							"value": "20"
+						},
+						{
+							"key": "offset",
+							"value": "0"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Refund by ID",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/refunds/{{refund_id}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"refunds",
+						"{{refund_id}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Payment History",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/payment-history/{{payment_id}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"payment-history",
+						"{{payment_id}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get User Payment History",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/payment-history/user/{{user_id}}?limit=20&offset=0",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"payment-history",
+						"user",
+						"{{user_id}}"
+					],
+					"query": [
+						{
+							"key": "limit",
+							"value": "20"
+						},
+						{
+							"key": "offset",
+							"value": "0"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get All Payment History",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/payment-history?limit=20&offset=0",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"payment-history"
+					],
+					"query": [
+						{
+							"key": "limit",
+							"value": "20"
+						},
+						{
+							"key": "offset",
+							"value": "0"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Paystack Webhook",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "x-paystack-signature",
+						"value": "{{paystack_signature}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"event\": \"charge.success\",\n  \"data\": {\n    \"id\": 1234567890,\n    \"domain\": \"test\",\n    \"status\": \"success\",\n    \"reference\": \"{{payment_id}}\",\n    \"amount\": 2500,\n    \"message\": null,\n    \"gateway_response\": \"Successful\",\n    \"paid_at\": \"2024-01-15T10:30:00.000Z\",\n    \"created_at\": \"2024-01-15T10:25:00.000Z\",\n    \"channel\": \"card\",\n    \"currency\": \"NGN\",\n    \"ip_address\": \"127.0.0.1\",\n    \"metadata\": {\n      \"user_id\": \"{{user_id}}\",\n      \"order_id\": \"order_123\"\n    },\n    \"log\": null,\n    \"fees\": 50,\n    \"fees_split\": null,\n    \"authorization\": {\n      \"authorization_code\": \"AUTH_1234567890\",\n      \"bin\": \"408408\",\n      \"last4\": \"4085\",\n      \"exp_month\": \"12\",\n      \"exp_year\": \"2025\",\n      \"channel\": \"card\",\n      \"card_type\": \"visa\",\n      \"bank\": \"TEST BANK\",\n      \"country_code\": \"NG\",\n      \"brand\": \"visa\",\n      \"reusable\": true,\n      \"signature\": \"SIG_1234567890\",\n      \"account_name\": null\n    },\n    \"customer\": {\n      \"id\": 123456,\n      \"first_name\": \"Test\",\n      \"last_name\": \"User\",\n      \"email\": \"test@example.com\",\n      \"customer_code\": \"CUS_1234567890\",\n      \"phone\": null,\n      \"metadata\": null,\n      \"risk_action\": \"default\",\n      \"international_format_phone\": null\n    },\n    \"plan\": null,\n    \"split\": {},\n    \"order_id\": null,\n    \"paidAt\": \"2024-01-15T10:30:00.000Z\",\n    \"createdAt\": \"2024-01-15T10:25:00.000Z\",\n    \"requested_amount\": 2500,\n    \"pos_transaction_data\": null,\n    \"source\": null,\n    \"fees_breakdown\": null\n  }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/webhooks/paystack",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"webhooks",
+						"paystack"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Payment Return URL",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/payments/return?reference={{payment_id}}&status=success",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"payments",
+						"return"
+					],
+					"query": [
+						{
+							"key": "reference",
+							"value": "{{payment_id}}"
+						},
+						{
+							"key": "status",
+							"value": "success"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8888",
+			"type": "string"
+		},
+		{
+			"key": "auth_token",
+			"value": "test-token",
+			"type": "string"
+		},
+		{
+			"key": "user_id",
+			"value": "550e8400-e29b-41d4-a716-446655440000",
+			"type": "string"
+		},
+		{
+			"key": "payment_id",
+			"value": "88996b7d-4691-40e4-afc2-bcdfe92ad704",
+			"type": "string"
+		},
+		{
+			"key": "refund_id",
+			"value": "155db763-c345-44d8-bf93-df2b0337bc80",
+			"type": "string"
+		},
+		{
+			"key": "paystack_signature",
+			"value": "your_paystack_webhook_signature",
+			"type": "string"
+		}
+	]
+}

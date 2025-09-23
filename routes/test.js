@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.get("/publish", (req, res) => {
     publishPaymentEvent('payment_initiated', {
-        paymentId: 'test_pay_1',
+        payment_id: 'test_pay_1',
         orderId: 'test_order_1',
         userId: 'test_user_1',
         amount: 5000,

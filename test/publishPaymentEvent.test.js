@@ -12,7 +12,7 @@ const mockedQueueSetup = vi.mocked(queueSetup);
 describe('publishPaymentEvent', () => {
   it('should call publish with the correct payload', () => {
     const mockPayload = {
-      paymentId: 'pay_123',
+      payment_id: 'pay_123',
       orderId: 'ord_456',
       userId: 'user_789',
       amount: 1000,
