@@ -5,15 +5,15 @@ import { API_CONFIG, SECURITY_CONFIG } from '../config/constants.js';
 const router = express.Router();
 
 /**
- * GET /payment-history/:paymentId - Get payment history for a specific payment
+ * GET /payment-history/:payment_id - Get payment history for a specific payment
  */
-router.get('/:paymentId', async (req, res) => {
+router.get('/:payment_id', async (req, res) => {
     try {
-        const { paymentId } = req.params;
+        const { payment_id } = req.params;
 
         // Validate UUID format
         const uuidRegex = SECURITY_CONFIG.UUID_PATTERN;
-        if (!uuidRegex.test(paymentId)) {
+        if (!uuidRegex.test(payment_id)) {
             return res.status(API_CONFIG.STATUS_CODES.BAD_REQUEST).json({
                 success: false,
                 error: {
@@ -26,12 +26,12 @@ router.get('/:paymentId', async (req, res) => {
 
         // Use safe helper function
         const query = 'SELECT * FROM get_payment_history($1)';
-        const result = await dbPoolManager.executeRead(query, [paymentId]);
+        const result = await dbPoolManager.executeRead(query, [payment_id]);
 
         res.status(API_CONFIG.STATUS_CODES.OK).json({
             success: true,
             data: {
-                payment_id: paymentId,
+                payment_id: payment_id,
                 history: result.rows
             }
         });
@@ -74,19 +74,50 @@ router.get('/user/:userId', async (req, res) => {
         const limitNum = Math.min(parseInt(limit) || API_CONFIG.DEFAULT_PAGINATION_LIMIT, API_CONFIG.MAX_PAGINATION_LIMIT);
         const offsetNum = Math.max(parseInt(offset) || API_CONFIG.DEFAULT_PAGINATION_OFFSET, 0);
 
-        // Use safe helper function
-        const query = 'SELECT * FROM get_user_payment_history($1, $2, $3)';
+        // Use safe helper function with explicit parameter types
+        const query = 'SELECT * FROM get_user_payment_history($1::UUID, $2::INTEGER, $3::INTEGER)';
         const result = await dbPoolManager.executeRead(query, [userId, limitNum, offsetNum]);
+
+        // Format the response with complete payment data
+        const formattedHistory = result.rows.map(row => ({
+            payment_id: row.payment_id,
+            user_id: row.user_id,
+            order_id: row.order_id,
+            amount: row.amount,
+            currency: row.currency,
+            status: row.status,
+            gateway_response: row.gateway_response,
+            idempotency_key: row.idempotency_key,
+            metadata: row.metadata,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            // Extract user info from metadata
+            user: row.metadata?.user || null,
+            // Extract order info from metadata
+            order: row.metadata?.order || null,
+            // Extract payment method info from gateway response
+            payment_method: row.gateway_response?.authorization?.authorization_code ? {
+                type: row.gateway_response?.channel || 'unknown',
+                authorization_code: row.gateway_response?.authorization?.authorization_code,
+                card_type: row.gateway_response?.authorization?.card_type,
+                last4: row.gateway_response?.authorization?.last4,
+                exp_month: row.gateway_response?.authorization?.exp_month,
+                exp_year: row.gateway_response?.authorization?.exp_year,
+                bank: row.gateway_response?.authorization?.bank,
+                country_code: row.gateway_response?.authorization?.country_code
+            } : null
+        }));
 
         res.status(API_CONFIG.STATUS_CODES.OK).json({
             success: true,
             data: {
                 user_id: userId,
-                history: result.rows,
+                history: formattedHistory,
                 pagination: {
                     limit: limitNum,
                     offset: offsetNum,
-                    count: result.rows.length
+                    count: result.rows.length,
+                    total: result.rows.length > 0 ? result.rows[0].total_count : 0
                 }
             }
         });

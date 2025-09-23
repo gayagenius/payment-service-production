@@ -106,7 +106,7 @@ router.post('/', async (req, res) => {
         }
 
         // Determine gateway based on type
-        const gateway = type === 'MPESA' || type === 'MOBILE_MONEY' ? 'mpesa' : 'stripe';
+        const gateway = 'paystack';
 
         // Create payment method using gateway
         const paymentMethodData = {

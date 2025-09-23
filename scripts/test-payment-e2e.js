@@ -110,7 +110,7 @@ const testStripePayment = async () => {
     return {
         success: result.success && result.data.success,
         data: result.data,
-        paymentId: result.data.data?.id
+        payment_id: result.data.data?.id
     };
 };
 
@@ -136,29 +136,29 @@ const testMpesaPayment = async () => {
     return {
         success: result.success && result.data.success,
         data: result.data,
-        paymentId: result.data.data?.id
+        payment_id: result.data.data?.id
     };
 };
 
-const testGetPayment = async (paymentId) => {
-    if (!paymentId) {
+const testGetPayment = async (payment_id) => {
+    if (!payment_id) {
         return { success: false, error: 'No payment ID provided' };
     }
 
-    const result = await apiRequest('GET', `/payments/${paymentId}`);
+    const result = await apiRequest('GET', `/payments/${payment_id}`);
     return {
         success: result.success && result.data.success,
         data: result.data
     };
 };
 
-const testCreateRefund = async (paymentId) => {
-    if (!paymentId) {
+const testCreateRefund = async (payment_id) => {
+    if (!payment_id) {
         return { success: false, error: 'No payment ID provided' };
     }
 
     const refundData = {
-        payment_id: paymentId,
+        payment_id: payment_id,
         amount: 1000, // Partial refund
         reason: 'E2E Test Refund',
         metadata: {
@@ -187,12 +187,12 @@ const testGetRefund = async (refundId) => {
     };
 };
 
-const testPaymentHistory = async (paymentId) => {
-    if (!paymentId) {
+const testPaymentHistory = async (payment_id) => {
+    if (!payment_id) {
         return { success: false, error: 'No payment ID provided' };
     }
 
-    const result = await apiRequest('GET', `/payment-history/${paymentId}`);
+    const result = await apiRequest('GET', `/payment-history/${payment_id}`);
     return {
         success: result.success && result.data.success,
         data: result.data
@@ -233,14 +233,14 @@ const runE2ETests = async () => {
 
     // Test Stripe payment
     const stripeResult = await runTest('Stripe Payment Creation', testStripePayment);
-    if (stripeResult && stripeResult.data && stripeResult.data.paymentId) {
-        stripePaymentId = stripeResult.data.paymentId;
+    if (stripeResult && stripeResult.data && stripeResult.data.payment_id) {
+        stripePaymentId = stripeResult.data.payment_id;
     }
 
     // Test M-Pesa payment
     const mpesaResult = await runTest('M-Pesa Payment Creation', testMpesaPayment);
-    if (mpesaResult && mpesaResult.data && mpesaResult.data.paymentId) {
-        mpesaPaymentId = mpesaResult.data.paymentId;
+    if (mpesaResult && mpesaResult.data && mpesaResult.data.payment_id) {
+        mpesaPaymentId = mpesaResult.data.payment_id;
     }
 
     // Test getting payments

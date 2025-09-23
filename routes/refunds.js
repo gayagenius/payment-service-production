@@ -12,7 +12,7 @@ const router = express.Router();
 router.post('/', async (req, res) => {
     try {
         const {
-            payment_id,
+            payment_id: payment_id,
             amount,
             reason,
             metadata = {},
@@ -66,18 +66,6 @@ router.post('/', async (req, res) => {
             });
         }
 
-        // Check if payment can be refunded
-        if (!['SUCCEEDED', 'AUTHORIZED'].includes(payment.status)) {
-            return res.status(400).json({
-                success: false,
-                error: {
-                    code: 'PAYMENT_NOT_REFUNDABLE',
-                    message: 'Payment cannot be refunded',
-                    details: `Payment status '${payment.status}' does not allow refunds`
-                }
-            });
-        }
-
         // Check refund amount doesn't exceed payment amount
         if (amount > payment.amount) {
             return res.status(400).json({
@@ -114,15 +102,15 @@ router.post('/', async (req, res) => {
         }
 
         // Determine gateway
-        const gateway = payment.payment_method_type === 'MPESA' || payment.payment_method_type === 'MOBILE_MONEY' ? 'mpesa' : 'stripe';
+        const gateway = 'paystack';
 
         // Generate idempotency key if not provided
         const finalIdempotencyKey = idempotencyKey || `refund_${payment_id}_${Date.now()}`;
 
         // Create refund in database
         const createRefundQuery = `
-            SELECT * FROM create_refund_with_history(
-                $1, $2, $3, $4, $5, $6, $7
+            SELECT * FROM create_refund(
+                $1, $2, $3, $4, $5
             )
         `;
 
@@ -130,10 +118,8 @@ router.post('/', async (req, res) => {
             payment_id,
             amount,
             payment.currency,
-            'PENDING',
             reason || 'Customer requested refund',
-            finalIdempotencyKey,
-            JSON.stringify(metadata)
+            finalIdempotencyKey
         ]);
 
         const refund = refundResult.rows[0];
@@ -152,7 +138,7 @@ router.post('/', async (req, res) => {
         // Process refund with gateway
         const refundData = {
             gateway,
-            transactionId: payment.gateway_response?.payment_intent_id || payment.gateway_response?.checkout_request_id,
+            transactionId: payment?.gateway_response?.reference,
             amount,
             reason: reason || 'Customer requested refund',
             metadata: {
@@ -165,9 +151,9 @@ router.post('/', async (req, res) => {
             idempotencyKey: finalIdempotencyKey
         };
 
-        // Add M-Pesa specific fields
-        if (gateway === 'mpesa') {
-            refundData.phoneNumber = payment.gateway_response?.phone_number || metadata.phoneNumber;
+        // Paystack specific fields (if needed)
+        if (gateway === 'paystack') {
+            // Add any Paystack-specific fields here if needed
         }
 
         const gatewayResult = await processRefundForGateway(refundData);
@@ -175,13 +161,12 @@ router.post('/', async (req, res) => {
         // Update refund with gateway response
         if (gatewayResult.success) {
             const updateRefundQuery = `
-                SELECT * FROM update_refund_status($1, $2::refund_status, $3)
+                SELECT * FROM update_refund_status($1, $2::refund_status)
             `;
             
             await dbPoolManager.executeWrite(updateRefundQuery, [
                 refund.refund_id,
-                gatewayResult.status,
-                JSON.stringify(gatewayResult.gatewayResponse)
+                gatewayResult.status
             ]);
 
             // Update payment status if fully refunded
@@ -205,7 +190,7 @@ router.post('/', async (req, res) => {
             try {
                 await publishPaymentEvent('refund_processed', {
                     refundId: refund.id,
-                    paymentId: payment_id,
+                    payment_id: payment_id,
                     orderId: payment.order_id,
                     userId: payment.user_id,
                     amount: amount,
@@ -219,13 +204,12 @@ router.post('/', async (req, res) => {
         } else {
             // Update refund with failure status
             const updateRefundQuery = `
-                SELECT * FROM update_refund_status($1, $2::refund_status, $3)
+                SELECT * FROM update_refund_status($1, $2::refund_status)
             `;
             
             await dbPoolManager.executeWrite(updateRefundQuery, [
                 refund.refund_id,
-                'FAILED',
-                JSON.stringify(gatewayResult.error)
+                'FAILED'
             ]);
         }
 
@@ -233,7 +217,7 @@ router.post('/', async (req, res) => {
         const responseStatus = gatewayResult.success ? 201 : 400;
         const responseData = {
             id: refund.refund_id,
-            paymentId: payment_id,
+            payment_id: payment_id,
             amount: amount,
             currency: payment.currency,
             status: gatewayResult.success ? gatewayResult.status : 'FAILED',
@@ -340,7 +324,7 @@ router.get('/', async (req, res) => {
             success: true,
             data: result.rows.map(row => ({
                 id: row.id,
-                paymentId: row.payment_id,
+                payment_id: row.payment_id,
                 amount: row.amount,
                 currency: row.currency,
                 status: row.status,
@@ -410,7 +394,7 @@ router.get('/:id', async (req, res) => {
             success: true,
             data: {
                 id: refund.id,
-                paymentId: refund.payment_id,
+                payment_id: refund.payment_id,
                 amount: refund.amount,
                 currency: refund.currency,
                 status: refund.status,

@@ -6,159 +6,11 @@ import { publishPaymentEvent } from '../messaging/publishPaymentEvent.js';
 const router = express.Router();
 
 /**
- * POST /webhooks/stripe - Handle Stripe webhooks
+ * Update payment from webhook data
  */
-router.post('/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
+async function updatePaymentFromWebhook(payment_id, status, gatewayResponse) {
     try {
-        const signature = req.headers['stripe-signature'];
-        const payload = req.body;
-
-        if (!signature) {
-            return res.status(400).json({
-                success: false,
-                error: {
-                    code: 'MISSING_SIGNATURE',
-                    message: 'Stripe signature header is required'
-                }
-            });
-        }
-
-        // Verify webhook signature
-        const verificationResult = await verifyWebhookSignature('stripe', payload, signature);
-        
-        if (!verificationResult.success) {
-            console.error('Stripe webhook verification failed:', verificationResult.error);
-            return res.status(400).json({
-                success: false,
-                error: {
-                    code: 'WEBHOOK_VERIFICATION_FAILED',
-                    message: verificationResult.error.message
-                }
-            });
-        }
-
-        // Handle webhook event
-        const handleResult = await handleWebhookEvent('stripe', verificationResult.event);
-        
-        if (!handleResult.success) {
-            console.error('Stripe webhook handling failed:', handleResult.error);
-            return res.status(500).json({
-                success: false,
-                error: {
-                    code: 'WEBHOOK_HANDLING_FAILED',
-                    message: handleResult.error.message
-                }
-            });
-        }
-
-        // Update payment status in database
-        if (handleResult.paymentId) {
-            await updatePaymentFromWebhook(handleResult.paymentId, handleResult.status, handleResult.gatewayResponse);
-            
-            // Publish webhook event
-            try {
-                await publishPaymentEvent('webhook_received', {
-                    paymentId: handleResult.paymentId,
-                    status: handleResult.status,
-                    gateway: 'stripe',
-                    eventType: verificationResult.event.type,
-                    correlationId: verificationResult.event.id
-                });
-            } catch (eventError) {
-                console.warn('Failed to publish webhook event:', eventError.message);
-            }
-        }
-
-        res.json({ success: true, message: 'Webhook processed successfully' });
-
-    } catch (error) {
-        console.error('Stripe webhook error:', error);
-        res.status(500).json({
-            success: false,
-            error: {
-                code: 'INTERNAL_ERROR',
-                message: 'Internal server error',
-                details: error.message
-            }
-        });
-    }
-});
-
-/**
- * POST /webhooks/mpesa - Handle M-Pesa webhooks
- */
-router.post('/mpesa', express.json(), async (req, res) => {
-    try {
-        const payload = JSON.stringify(req.body);
-        const signature = req.headers['x-mpesa-signature'] || '';
-
-        // Verify webhook (M-Pesa doesn't use signature verification like Stripe)
-        const verificationResult = await verifyWebhookSignature('mpesa', payload, signature);
-        
-        if (!verificationResult.success) {
-            console.error('M-Pesa webhook verification failed:', verificationResult.error);
-            return res.status(400).json({
-                success: false,
-                error: {
-                    code: 'WEBHOOK_VERIFICATION_FAILED',
-                    message: verificationResult.error.message
-                }
-            });
-        }
-
-        // Handle webhook event
-        const handleResult = await handleWebhookEvent('mpesa', verificationResult.event);
-        
-        if (!handleResult.success) {
-            console.error('M-Pesa webhook handling failed:', handleResult.error);
-            return res.status(500).json({
-                success: false,
-                error: {
-                    code: 'WEBHOOK_HANDLING_FAILED',
-                    message: handleResult.error.message
-                }
-            });
-        }
-
-        // Update payment status in database
-        if (handleResult.paymentId) {
-            await updatePaymentFromWebhook(handleResult.paymentId, handleResult.status, handleResult.gatewayResponse);
-            
-            // Publish webhook event
-            try {
-                await publishPaymentEvent('webhook_received', {
-                    paymentId: handleResult.paymentId,
-                    status: handleResult.status,
-                    gateway: 'mpesa',
-                    eventType: 'stk_callback',
-                    correlationId: handleResult.gatewayResponse?.checkout_request_id
-                });
-            } catch (eventError) {
-                console.warn('Failed to publish webhook event:', eventError.message);
-            }
-        }
-
-        res.json({ success: true, message: 'Webhook processed successfully' });
-
-    } catch (error) {
-        console.error('M-Pesa webhook error:', error);
-        res.status(500).json({
-            success: false,
-            error: {
-                code: 'INTERNAL_ERROR',
-                message: 'Internal server error',
-                details: error.message
-            }
-        });
-    }
-});
-
-/**
- * Update payment status from webhook
- */
-const updatePaymentFromWebhook = async (paymentId, status, gatewayResponse) => {
-    try {
-        const query = `
+        const updateQuery = `
             UPDATE payments 
             SET 
                 status = $1,
@@ -166,45 +18,81 @@ const updatePaymentFromWebhook = async (paymentId, status, gatewayResponse) => {
                 updated_at = NOW()
             WHERE id = $3
         `;
-
-        await dbPoolManager.executeWrite(query, [
+        
+        await dbPoolManager.executeWrite(updateQuery, [
             status,
             JSON.stringify(gatewayResponse),
-            paymentId
+            payment_id
         ]);
 
-        // Log status change in payment history
-        const historyQuery = `
-            INSERT INTO payment_history (
-                payment_id, status, created_at, updated_at
-            ) VALUES (
-                $1, $2, NOW(), NOW()
-            )
-        `;
+        // Publish payment event
+        await publishPaymentEvent('payment_updated', {
+            payment_id,
+            status,
+            gatewayResponse,
+            source: 'webhook'
+        });
 
-        await dbPoolManager.executeWrite(historyQuery, [paymentId, status]);
-
-        console.log(`Payment ${paymentId} status updated to ${status} via webhook`);
-
+        console.log(`Payment ${payment_id} updated to ${status} via webhook`);
     } catch (error) {
         console.error('Failed to update payment from webhook:', error);
         throw error;
     }
-};
+}
 
 /**
- * GET /webhooks/health - Webhook health check
+ * POST /webhooks/paystack - Handle Paystack webhooks
  */
-router.get('/health', (req, res) => {
-    res.json({
-        success: true,
-        message: 'Webhook endpoints are healthy',
-        endpoints: {
-            stripe: '/webhooks/stripe',
-            mpesa: '/webhooks/mpesa'
-        },
-        timestamp: new Date().toISOString()
-    });
+router.post('/paystack', express.json(), async (req, res) => {
+    try {
+        // Verify webhook signature
+        if (!verifyWebhookSignature('paystack', req)) {
+            return res.status(400).json({ success: false, message: 'Invalid Paystack webhook signature' });
+        }
+
+        const event = req.body;
+        const processedEvent = handleWebhookEvent('paystack', event);
+
+        if (processedEvent && processedEvent.type === 'payment_update') {
+            const { payment_id, status, gatewayResponse } = processedEvent;
+            await updatePaymentFromWebhook(payment_id, status, gatewayResponse);
+        } else if (processedEvent && processedEvent.type === 'refund_update') {
+            // Handle refund updates
+            const { refundId, status, gatewayResponse } = processedEvent;
+            console.log(`Paystack refund ${refundId} status updated to ${status} via webhook`);
+        }
+
+        res.status(200).json({ success: true, message: 'Webhook received and processed' });
+    } catch (error) {
+        console.error('Paystack webhook error:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+/**
+ * GET /webhooks/status - Get webhook status
+ */
+router.get('/status', async (req, res) => {
+    try {
+        res.json({
+            success: true,
+            data: {
+                webhooks: {
+                    paystack: '/webhooks/paystack'
+                },
+                status: 'active'
+            }
+        });
+    } catch (error) {
+        console.error('Webhook status error:', error);
+        res.status(500).json({
+            success: false,
+            error: {
+                code: 'INTERNAL_ERROR',
+                message: 'Internal server error'
+            }
+        });
+    }
 });
 
 export default router;

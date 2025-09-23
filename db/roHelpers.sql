@@ -38,6 +38,7 @@ CREATE OR REPLACE FUNCTION create_payment_with_history(
 DECLARE
     new_payment_id UUID;
     payment_status payment_status := 'PENDING';
+    payment_created_at TIMESTAMPTZ;
     error_msg TEXT;
 BEGIN
     -- Validate input parameters
@@ -65,13 +66,13 @@ BEGIN
     IF p_idempotency_key IS NOT NULL THEN
         IF EXISTS (SELECT 1 FROM payments WHERE idempotency_key = p_idempotency_key) THEN
             -- Return existing payment
-            SELECT id, status, created_at INTO new_payment_id, payment_status, created_at
+            SELECT id, status, created_at INTO new_payment_id, payment_status, payment_created_at
             FROM payments 
             WHERE idempotency_key = p_idempotency_key;
             
             -- If retry is requested, return existing payment
             IF p_retry THEN
-                RETURN QUERY SELECT new_payment_id, payment_status, created_at, TRUE, 'Payment already exists'::TEXT;
+                RETURN QUERY SELECT new_payment_id, payment_status, payment_created_at, TRUE, 'Payment already exists'::TEXT;
                 RETURN;
             ELSE
                 -- If not retry, return error
@@ -89,16 +90,16 @@ BEGIN
         ) VALUES (
             p_user_id, p_order_id, p_amount, p_currency, payment_status,
             p_payment_method_id, p_gateway_response, p_idempotency_key, p_metadata
-        ) RETURNING id, created_at INTO new_payment_id, created_at;
+        ) RETURNING id, created_at INTO new_payment_id, payment_created_at;
         
         -- Insert payment history entry
         INSERT INTO payment_history (
-            payment_id, status, created_at, updated_at, metadata
+            payment_id, status, created_at, metadata
         ) VALUES (
-            new_payment_id, payment_status, created_at, created_at, p_metadata
+            new_payment_id, payment_status, payment_created_at, p_metadata
         );
         
-        RETURN QUERY SELECT new_payment_id, payment_status, created_at, TRUE, NULL::TEXT;
+        RETURN QUERY SELECT new_payment_id, payment_status, payment_created_at, TRUE, NULL::TEXT;
         
     EXCEPTION WHEN OTHERS THEN
         error_msg := SQLERRM;
@@ -174,9 +175,9 @@ DECLARE
 BEGIN
     -- Get total count
     SELECT COUNT(*) INTO total_count
-        FROM payments
-        WHERE user_id = p_user_id
-        AND (p_status IS NULL OR status = p_status);
+        FROM payments p
+        WHERE p.user_id = p_user_id
+        AND (p_status IS NULL OR p.status = p_status);
     
     -- Return paginated results
     RETURN QUERY
@@ -524,6 +525,10 @@ DECLARE
     payment_amount INTEGER;
     total_refunded INTEGER;
     refund_status refund_status := 'PENDING';
+    refund_created_at TIMESTAMPTZ;
+    refund_amount INTEGER;
+    refund_currency CHAR(3);
+    refund_reason TEXT;
     error_msg TEXT;
 BEGIN
     -- Validate input parameters
@@ -546,12 +551,12 @@ BEGIN
     IF p_idempotency_key IS NOT NULL THEN
         IF EXISTS (SELECT 1 FROM refunds WHERE idempotency_key = p_idempotency_key) THEN
             -- Return existing refund
-            SELECT id, payment_id, amount, currency, status, reason, created_at 
-            INTO new_refund_id, payment_id, amount, currency, refund_status, reason, created_at
-            FROM refunds 
-            WHERE idempotency_key = p_idempotency_key;
+            SELECT r.id, r.payment_id, r.amount, r.currency, r.status, r.reason, r.created_at 
+            INTO new_refund_id, payment_id, refund_amount, refund_currency, refund_status, refund_reason, refund_created_at
+            FROM refunds r
+            WHERE r.idempotency_key = p_idempotency_key;
             
-            RETURN QUERY SELECT new_refund_id, payment_id, amount, currency, refund_status, reason, created_at, TRUE, 'Refund already exists'::TEXT;
+            RETURN QUERY SELECT new_refund_id, payment_id, refund_amount, refund_currency, refund_status, refund_reason, refund_created_at, TRUE, 'Refund already exists'::TEXT;
             RETURN;
         END IF;
     END IF;
@@ -568,9 +573,9 @@ BEGIN
         END IF;
         
         -- Get total refunded amount
-        SELECT COALESCE(SUM(amount), 0) INTO total_refunded
-        FROM refunds
-        WHERE payment_id = p_payment_id AND status = 'SUCCEEDED';
+        SELECT COALESCE(SUM(r.amount), 0) INTO total_refunded
+        FROM refunds r
+        WHERE r.payment_id = p_payment_id AND r.status = 'SUCCEEDED';
         
         -- Validate refund amount
         IF (total_refunded + p_amount) > payment_amount THEN
@@ -583,9 +588,9 @@ BEGIN
             payment_id, amount, currency, status, reason, idempotency_key
         ) VALUES (
             p_payment_id, p_amount, p_currency, refund_status, p_reason, p_idempotency_key
-        ) RETURNING id, created_at INTO new_refund_id, created_at;
+        ) RETURNING id, created_at INTO new_refund_id, refund_created_at;
         
-        RETURN QUERY SELECT new_refund_id, p_payment_id, p_amount, p_currency, refund_status, p_reason, created_at, TRUE, NULL::TEXT;
+        RETURN QUERY SELECT new_refund_id, p_payment_id, p_amount, p_currency, refund_status, p_reason, refund_created_at, TRUE, NULL::TEXT;
         
     EXCEPTION WHEN OTHERS THEN
         error_msg := SQLERRM;

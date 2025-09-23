@@ -1,231 +1,155 @@
-import { createPaymentIntent, createPaymentMethod, processRefund as stripeRefund, verifyWebhook as stripeVerifyWebhook, handleWebhook as stripeHandleWebhook } from '../gateways/stripe.js';
-import { initiateSTKPush, querySTKPushStatus, processRefund as mpesaRefund, verifyWebhook as mpesaVerifyWebhook, handleWebhook as mpesaHandleWebhook, validatePhoneNumber } from '../gateways/mpesa.js';
 /**
- * Determine which gateway to use based on payment method type
+ * Payment Processor Service
+ * Orchestrates payment processing with Paystack
  */
-const getGatewayForPaymentMethod = (paymentMethodType) => {
-    const gatewayMap = {
-        'CARD': 'stripe',
-        'WALLET': 'stripe',
-        'BANK_TRANSFER': 'stripe',
-        'MPESA': 'mpesa',
-        'MOBILE_MONEY': 'mpesa'
-    };
-    return gatewayMap[paymentMethodType] || 'stripe';
-};
+
+import { 
+    initializePayment, 
+    verifyPayment, 
+    processRefund as paystackRefund, 
+    verifyWebhook as paystackVerifyWebhook, 
+    handleWebhook as paystackHandleWebhook,
+    getSupportedPaymentMethods,
+    getSupportedCurrencies
+} from '../gateways/paystack.js';
 
 /**
- * Process payment using the appropriate gateway
+ * Process payment using Paystack
  */
 export const processPayment = async (paymentData) => {
     try {
-        const { paymentMethodType, amount, currency, metadata } = paymentData;
-        const gateway = getGatewayForPaymentMethod(paymentMethodType);
+        const { 
+            userId, 
+            orderId, 
+            amount, 
+            currency, 
+            metadata = {},
+            idempotencyKey 
+        } = paymentData;
 
-        // Validate currency for M-Pesa (only KES supported)
-        if (gateway === 'mpesa' && currency !== 'KES') {
+        // Validate required fields
+        if (!userId || !orderId || !amount || !currency) {
             return {
                 success: false,
                 error: {
-                    code: 'INVALID_CURRENCY',
-                    message: 'M-Pesa only supports KES currency',
-                    details: `Currency ${currency} not supported for M-Pesa payments`
+                    code: 'VALIDATION_ERROR',
+                    message: 'Missing required fields',
+                    details: 'user_id, order_id, amount, and currency are required'
                 }
             };
         }
 
-        // Validate amount for M-Pesa (minimum 1 KES)
-        if (gateway === 'mpesa' && amount < 1) {
+        // Validate amount
+        if (amount < 1) {
             return {
                 success: false,
                 error: {
                     code: 'INVALID_AMOUNT',
-                    message: 'M-Pesa minimum amount is 1 KES',
-                    details: `Amount ${amount} is below minimum for M-Pesa`
+                    message: 'Amount must be at least 1',
+                    details: `Amount ${amount} is below minimum`
                 }
             };
         }
 
-        let result;
-
-        if (gateway === 'stripe') {
-            result = await processStripePayment(paymentData);
-        } else if (gateway === 'mpesa') {
-            result = await processMpesaPayment(paymentData);
+        // Validate currency
+        const supportedCurrencies = getSupportedCurrencies();
+        const currencySupported = supportedCurrencies.some(c => c.code === currency);
+        if (!currencySupported) {
+            return {
+                success: false,
+                error: {
+                    code: 'INVALID_CURRENCY',
+                    message: 'Currency not supported',
+                    details: `Currency ${currency} is not supported`
+                }
+            };
         }
+
+        // Generate reference for Paystack
+        const reference = idempotencyKey || `ref_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        // Prepare payment data for Paystack
+        const paystackPaymentData = {
+            amount: amount,
+            currency: currency,
+            email: metadata.user?.email || `${userId}@example.com`,
+            reference: reference,
+            metadata: {
+                user_id: userId,
+                order_id: orderId,
+                ...metadata
+            },
+            callback_url: `${process.env.BASE_URL || 'http://localhost:8888'}/payments/return`
+        };
+
+        // Initialize payment with Paystack
+        const result = await initializePayment(paystackPaymentData);
+
+        if (!result.success) {
+            return result;
+        }
+
+        return {
+            success: true,
+            transactionId: result.transactionId,
+            status: result.status,
+            gateway: 'paystack',
+            gatewayResponse: result.gatewayResponse
+        };
+
+    } catch (error) {
+        console.error('Payment processing error:', error);
+        return {
+            success: false,
+            error: {
+                code: 'PROCESSING_ERROR',
+                message: 'Payment processing failed',
+                details: error.message
+            }
+        };
+    }
+};
+
+/**
+ * Verify payment status
+ */
+export const queryPaymentStatus = async (transactionId) => {
+    try {
+        const result = await verifyPayment(transactionId);
+        return result;
+    } catch (error) {
+        return {
+            success: false,
+            error: {
+                code: 'VERIFICATION_ERROR',
+                message: 'Payment verification failed',
+                details: error.message
+            }
+        };
+    }
+};
+
+/**
+ * Process refund using Paystack
+ */
+export const processRefundForGateway = async (refundData) => {
+    try {
+        const { transactionId, amount, reason } = refundData;
+
+        const result = await paystackRefund({
+            transactionId,
+            amount,
+            reason
+        });
 
         return result;
     } catch (error) {
         return {
             success: false,
             error: {
-                code: 'PAYMENT_PROCESSING_ERROR',
-                message: error.message
-            }
-        };
-    }
-};
-
-/**
- * Process Stripe payment
- */
-const processStripePayment = async (paymentData) => {
-    const { paymentMethodId, paymentMethod, amount, currency, metadata, idempotencyKey } = paymentData;
-
-    // Flatten metadata for Stripe (Stripe only accepts string values)
-    const flattenedMetadata = {
-        gateway: 'stripe',
-        order_id: metadata.order?.id || '',
-        order_description: metadata.order?.description || '',
-        user_id: metadata.user?.id || '',
-        user_email: metadata.user?.email || '',
-        user_name: metadata.user?.name || '',
-        test_mode: metadata.testMode ? 'true' : 'false'
-    };
-
-    // Create payment intent
-    const paymentIntentResult = await createPaymentIntent({
-        amount,
-        currency,
-        paymentMethodId,
-        paymentMethod,
-        metadata: flattenedMetadata,
-        idempotencyKey
-    });
-
-    if (!paymentIntentResult.success) {
-        return paymentIntentResult;
-    }
-
-    return {
-        success: true,
-        transactionId: paymentIntentResult.transactionId,
-        status: paymentIntentResult.status,
-        gateway: 'stripe',
-        gatewayResponse: paymentIntentResult.gatewayResponse
-    };
-};
-
-/**
- * Process M-Pesa payment
- */
-const processMpesaPayment = async (paymentData) => {
-    const { phoneNumber, amount, accountReference, transactionDesc, metadata, idempotencyKey } = paymentData;
-
-    // Validate phone number
-    const phoneValidation = validatePhoneNumber(phoneNumber);
-    if (!phoneValidation.valid) {
-        return {
-            success: false,
-            error: {
-                code: 'INVALID_PHONE_NUMBER',
-                message: phoneValidation.error
-            }
-        };
-    }
-
-    // Initiate STK Push
-    const stkPushResult = await initiateSTKPush({
-        amount,
-        phoneNumber: phoneValidation.formatted,
-        accountReference,
-        transactionDesc,
-        metadata,
-        idempotencyKey
-    });
-
-    if (!stkPushResult.success) {
-        return stkPushResult;
-    }
-
-    return {
-        success: true,
-        transactionId: stkPushResult.transactionId,
-        status: stkPushResult.status,
-        gateway: 'mpesa',
-        gatewayResponse: stkPushResult.gatewayResponse
-    };
-};
-
-/**
- * Create payment method using the appropriate gateway
- */
-export const createPaymentMethodForGateway = async (paymentMethodData) => {
-    try {
-        const { type, gateway } = paymentMethodData;
-
-        if (gateway === 'stripe') {
-            return await createPaymentMethod(paymentMethodData);
-        } else if (gateway === 'mpesa') {
-            // M-Pesa doesn't support saved payment methods
-            // Return a mock response for consistency
-            return {
-                success: true,
-                paymentMethodId: `mpesa_${Date.now()}`,
-                gatewayResponse: {
-                    type: 'MPESA',
-                    phone_number: paymentMethodData.phoneNumber
-                }
-            };
-        }
-
-        return {
-            success: false,
-            error: {
-                code: 'UNSUPPORTED_GATEWAY',
-                message: `Gateway ${gateway} not supported for payment method creation`
-            }
-        };
-    } catch (error) {
-        return {
-            success: false,
-            error: {
-                code: 'PAYMENT_METHOD_CREATION_ERROR',
-                message: error.message
-            }
-        };
-    }
-};
-
-/**
- * Process refund using the appropriate gateway
- */
-export const processRefundForGateway = async (refundData) => {
-    try {
-        const { gateway, transactionId, amount, reason, metadata, idempotencyKey } = refundData;
-
-        if (gateway === 'stripe') {
-            return await stripeRefund({
-                paymentIntentId: transactionId,
-                amount,
-                reason,
-                metadata,
-                idempotencyKey
-            });
-        } else if (gateway === 'mpesa') {
-            return await mpesaRefund({
-                transactionId,
-                amount,
-                phoneNumber: refundData.phoneNumber,
-                remarks: reason,
-                metadata,
-                idempotencyKey
-            });
-        }
-
-        return {
-            success: false,
-            error: {
-                code: 'UNSUPPORTED_GATEWAY',
-                message: `Gateway ${gateway} not supported for refunds`
-            }
-        };
-    } catch (error) {
-        return {
-            success: false,
-            error: {
-                code: 'REFUND_PROCESSING_ERROR',
-                message: error.message
+                code: 'REFUND_ERROR',
+                message: 'Refund processing failed',
+                details: error.message
             }
         };
     }
@@ -234,109 +158,90 @@ export const processRefundForGateway = async (refundData) => {
 /**
  * Verify webhook signature
  */
-export const verifyWebhookSignature = async (gateway, payload, signature) => {
+export const verifyWebhookSignature = (payload, signature, gateway) => {
     try {
-        if (gateway === 'stripe') {
-            return stripeVerifyWebhook(payload, signature);
-        } else if (gateway === 'mpesa') {
-            return mpesaVerifyWebhook(payload, signature);
+        switch (gateway) {
+            case 'paystack':
+                return paystackVerifyWebhook(payload, signature);
+            default:
+                return false;
         }
+    } catch (error) {
+        console.error('Webhook verification error:', error);
+        return false;
+    }
+};
 
-        return {
-            success: false,
-            error: {
-                code: 'UNSUPPORTED_GATEWAY',
-                message: `Gateway ${gateway} not supported for webhook verification`
-            }
-        };
+/**
+ * Handle webhook events
+ */
+export const handleWebhookEvent = async (event, gateway) => {
+    try {
+        switch (gateway) {
+            case 'paystack':
+                return await paystackHandleWebhook(event);
+            default:
+                return {
+                    success: false,
+                    error: {
+                        code: 'UNKNOWN_GATEWAY',
+                        message: `Unknown gateway: ${gateway}`,
+                        type: 'webhook_error'
+                    }
+                };
+        }
     } catch (error) {
         return {
             success: false,
             error: {
-                code: 'WEBHOOK_VERIFICATION_ERROR',
-                message: error.message
+                code: 'WEBHOOK_ERROR',
+                message: 'Webhook processing failed',
+                details: error.message
             }
         };
     }
 };
 
 /**
- * Handle webhook event
+ * Create payment method for gateway
  */
-export const handleWebhookEvent = async (gateway, event) => {
+export const createPaymentMethodForGateway = async (paymentMethodData) => {
     try {
-        if (gateway === 'stripe') {
-            return await stripeHandleWebhook(event);
-        } else if (gateway === 'mpesa') {
-            return await mpesaHandleWebhook(event);
-        }
+        const { type, gateway, ...details } = paymentMethodData;
 
+        // For Paystack, we don't need to create payment methods upfront
+        // They are created during payment initialization
         return {
-            success: false,
-            error: {
-                code: 'UNSUPPORTED_GATEWAY',
-                message: `Gateway ${gateway} not supported for webhook handling`
+            success: true,
+            paymentMethodId: `pm_${Date.now()}`,
+            gatewayResponse: {
+                type: type,
+                gateway: gateway,
+                created: true
             }
         };
     } catch (error) {
         return {
             success: false,
             error: {
-                code: 'WEBHOOK_HANDLING_ERROR',
-                message: error.message
+                code: 'PAYMENT_METHOD_ERROR',
+                message: 'Payment method creation failed',
+                details: error.message
             }
         };
     }
 };
 
 /**
- * Query payment status (for M-Pesa)
+ * Get supported payment methods
  */
-export const queryPaymentStatus = async (gateway, transactionId) => {
-    try {
-        if (gateway === 'mpesa') {
-            return await querySTKPushStatus(transactionId);
-        }
-
-        // Stripe doesn't need status querying as it's real-time
-        return {
-            success: false,
-            error: {
-                code: 'UNSUPPORTED_OPERATION',
-                message: `Status querying not supported for gateway ${gateway}`
-            }
-        };
-    } catch (error) {
-        return {
-            success: false,
-            error: {
-                code: 'STATUS_QUERY_ERROR',
-                message: error.message
-            }
-        };
-    }
+export const getSupportedPaymentMethodsForGateway = () => {
+    return getSupportedPaymentMethods();
 };
 
 /**
- * Get supported payment methods for a gateway
+ * Get supported currencies
  */
-export const getSupportedPaymentMethods = (gateway) => {
-    const supportedMethods = {
-        'stripe': ['CARD', 'WALLET', 'BANK_TRANSFER'],
-        'mpesa': ['MPESA', 'MOBILE_MONEY']
-    };
-    
-    return supportedMethods[gateway] || [];
-};
-
-/**
- * Get supported currencies for a gateway
- */
-export const getSupportedCurrencies = (gateway) => {
-    const supportedCurrencies = {
-        'stripe': ['USD', 'EUR', 'GBP', 'KES', 'NGN', 'ZAR', 'EGP'],
-        'mpesa': ['KES']
-    };
-    
-    return supportedCurrencies[gateway] || [];
+export const getSupportedCurrenciesForGateway = () => {
+    return getSupportedCurrencies();
 };

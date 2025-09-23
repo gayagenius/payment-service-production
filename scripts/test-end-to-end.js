@@ -244,10 +244,10 @@ async function testApiEndpoints() {
       
       // Test 3: Get payment by ID
       if (paymentResponse.status === API_CONFIG.STATUS_CODES.CREATED && paymentResponse.data.success) {
-        const paymentId = paymentResponse.data.data.id;
+        const payment_id = paymentResponse.data.data.id;
         
         try {
-          const getResponse = await axios.get(`${config.api.baseUrl}/payments/${paymentId}`, {
+          const getResponse = await axios.get(`${config.api.baseUrl}/payments/${payment_id}`, {
             timeout: config.api.timeout
           });
           
@@ -438,10 +438,10 @@ async function testDatabaseHelpers() {
     });
     
     if (createResult.success) {
-      const paymentId = createResult.payment_id;
+      const payment_id = createResult.payment_id;
       
       // Test 2: Get payment by ID
-      const getPaymentResult = await client.query('SELECT * FROM get_payment_by_id($1)', [paymentId]);
+      const getPaymentResult = await client.query('SELECT * FROM get_payment_by_id($1)', [payment_id]);
       const getResult = getPaymentResult.rows[0];
       
       tests.push({
@@ -452,7 +452,7 @@ async function testDatabaseHelpers() {
       
       // Test 3: Update payment status
       const updateStatusResult = await client.query('SELECT * FROM update_payment_status($1, $2)', [
-        paymentId,
+        payment_id,
         PAYMENT_CONFIG.STATUS.SUCCEEDED
       ]);
       
@@ -470,7 +470,7 @@ async function testDatabaseHelpers() {
           $1, $2, $3, $4, $5
         )
       `, [
-        paymentId,
+        payment_id,
         500,
         'USD',
         'Test refund',
@@ -487,7 +487,7 @@ async function testDatabaseHelpers() {
       
       // Test 5: Check if payment can be refunded
       const canRefundResult = await client.query('SELECT * FROM can_refund_payment($1, $2)', [
-        paymentId,
+        payment_id,
         200
       ]);
       

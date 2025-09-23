@@ -7,7 +7,26 @@ import pg from 'pg';
 import { EventEmitter } from 'events';
 import { DB_CONFIG } from '../config/constants.js';
 
-const config = {
+const config = process.env.DATABASE_URL ? {
+  write: {
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+    max: parseInt(process.env.DB_WRITE_POOL_MAX) || DB_CONFIG.WRITE_POOL.MAX,
+    min: parseInt(process.env.DB_WRITE_POOL_MIN) || DB_CONFIG.WRITE_POOL.MIN,
+    idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT) || DB_CONFIG.WRITE_POOL.IDLE_TIMEOUT,
+    connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT) || DB_CONFIG.WRITE_POOL.CONNECTION_TIMEOUT,
+    acquireTimeoutMillis: parseInt(process.env.DB_ACQUIRE_TIMEOUT) || DB_CONFIG.WRITE_POOL.ACQUIRE_TIMEOUT,
+  },
+  read: {
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+    max: parseInt(process.env.DB_READ_POOL_MAX) || DB_CONFIG.READ_POOL.MAX,
+    min: parseInt(process.env.DB_READ_POOL_MIN) || DB_CONFIG.READ_POOL.MIN,
+    idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT) || DB_CONFIG.READ_POOL.IDLE_TIMEOUT,
+    connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT) || DB_CONFIG.READ_POOL.CONNECTION_TIMEOUT,
+    acquireTimeoutMillis: parseInt(process.env.DB_ACQUIRE_TIMEOUT) || DB_CONFIG.READ_POOL.ACQUIRE_TIMEOUT,
+  }
+} : {
   write: {
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 5432,
@@ -32,18 +51,18 @@ const config = {
     idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT) || DB_CONFIG.READ_POOL.IDLE_TIMEOUT,
     connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT) || DB_CONFIG.READ_POOL.CONNECTION_TIMEOUT,
     acquireTimeoutMillis: parseInt(process.env.DB_ACQUIRE_TIMEOUT) || DB_CONFIG.READ_POOL.ACQUIRE_TIMEOUT,
-  },
-  
-  healthCheck: {
-    interval: parseInt(process.env.DB_HEALTH_CHECK_INTERVAL) || DB_CONFIG.HEALTH_CHECK.INTERVAL,
-    timeout: parseInt(process.env.DB_HEALTH_CHECK_TIMEOUT) || DB_CONFIG.HEALTH_CHECK.TIMEOUT,
-    retries: parseInt(process.env.DB_HEALTH_CHECK_RETRIES) || DB_CONFIG.HEALTH_CHECK.RETRIES,
-  },
-  
-  consistency: {
-    maxLagSeconds: parseInt(process.env.DB_MAX_LAG_SECONDS) || DB_CONFIG.CONSISTENCY.MAX_LAG_SECONDS,
-    readAfterWriteDelay: parseInt(process.env.DB_READ_AFTER_WRITE_DELAY) || DB_CONFIG.CONSISTENCY.READ_AFTER_WRITE_DELAY,
   }
+};
+
+const healthCheckConfig = {
+  interval: parseInt(process.env.DB_HEALTH_CHECK_INTERVAL) || DB_CONFIG.HEALTH_CHECK.INTERVAL,
+  timeout: parseInt(process.env.DB_HEALTH_CHECK_TIMEOUT) || DB_CONFIG.HEALTH_CHECK.TIMEOUT,
+  retries: parseInt(process.env.DB_HEALTH_CHECK_RETRIES) || DB_CONFIG.HEALTH_CHECK.RETRIES,
+};
+
+const consistencyConfig = {
+  maxLagSeconds: parseInt(process.env.DB_MAX_LAG_SECONDS) || DB_CONFIG.CONSISTENCY.MAX_LAG_SECONDS,
+  readAfterWriteDelay: parseInt(process.env.DB_READ_AFTER_WRITE_DELAY) || DB_CONFIG.CONSISTENCY.READ_AFTER_WRITE_DELAY,
 };
 
 /**
@@ -72,13 +91,13 @@ class DatabasePoolManager extends EventEmitter {
       this.writePool = new pg.Pool({
         ...config.write,
         application_name: DB_CONFIG.APP_NAMES.WRITE,
-        ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+        ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : (process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false),
       });
 
       this.readPool = new pg.Pool({
         ...config.read,
         application_name: DB_CONFIG.APP_NAMES.READ,
-        ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+        ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : (process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false),
       });
 
       this.writePool.on('error', (err) => {
@@ -96,8 +115,13 @@ class DatabasePoolManager extends EventEmitter {
       this.startHealthMonitoring();
 
       console.log('Database connection pools initialized');
-      console.log(`Write pool: ${config.write.host}:${config.write.port}/${config.write.database}`);
-      console.log(`Read pool: ${config.read.host}:${config.read.port}/${config.read.database}`);
+      if (process.env.DATABASE_URL) {
+        console.log(`Write pool: ${process.env.DATABASE_URL.split('@')[1]}`);
+        console.log(`Read pool: ${process.env.DATABASE_URL.split('@')[1]}`);
+      } else {
+        console.log(`Write pool: ${config.write.host}:${config.write.port}/${config.write.database}`);
+        console.log(`Read pool: ${config.read.host}:${config.read.port}/${config.read.database}`);
+      }
 
     } catch (error) {
       console.error('Failed to initialize database pools:', error.message);
@@ -111,7 +135,7 @@ class DatabasePoolManager extends EventEmitter {
   startHealthMonitoring() {
     this.healthCheckInterval = setInterval(async () => {
       await this.performHealthCheck();
-    }, config.healthCheck.interval);
+    }, healthCheckConfig.interval);
 
     this.performHealthCheck();
   }
@@ -179,7 +203,7 @@ class DatabasePoolManager extends EventEmitter {
       
       this.emit('replicationLagCheck', {
         lagSeconds: this.writeLag,
-        withinThreshold: this.writeLag <= config.consistency.maxLagSeconds
+        withinThreshold: this.writeLag <= consistencyConfig.maxLagSeconds
       });
       
     } catch (error) {
@@ -255,7 +279,7 @@ class DatabasePoolManager extends EventEmitter {
     // Check if we need to wait for write consistency
     if (!allowStale && this.lastWriteTime) {
       const timeSinceWrite = Date.now() - this.lastWriteTime;
-      if (timeSinceWrite < config.consistency.readAfterWriteDelay) {
+      if (timeSinceWrite < consistencyConfig.readAfterWriteDelay) {
         // Use write pool for consistency
         return this.executeWrite(query, params);
       }
@@ -332,7 +356,7 @@ class DatabasePoolManager extends EventEmitter {
       replication: {
         lagSeconds: this.writeLag,
         lastWriteTime: this.lastWriteTime,
-        withinThreshold: this.writeLag <= config.consistency.maxLagSeconds
+        withinThreshold: this.writeLag <= consistencyConfig.maxLagSeconds
       }
     };
   }

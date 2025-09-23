@@ -109,22 +109,20 @@ router.post('/', async (req, res) => {
             userId: user_id,
             orderId: order_id,
             amount,
-            currency,
-            paymentMethodId,
-            paymentMethod,
+            currency = 'KES',
             metadata = {},
             idempotencyKey,
             retry = false
         } = req.body;
 
         // Validate required fields
-        if (!user_id || !order_id || !amount || !currency) {
+        if (!user_id || !order_id || !amount) {
             return res.status(400).json({
                 success: false,
                 error: {
                     code: 'VALIDATION_ERROR',
                     message: 'Missing required fields',
-                    details: 'user_id, order_id, amount, and currency are required'
+                    details: 'user_id, order_id, and amount are required'
                 }
             });
         }
@@ -141,17 +139,6 @@ router.post('/', async (req, res) => {
             });
         }
 
-        // Validate currency
-        if (currency.length !== PAYMENT_CONFIG.CURRENCY.LENGTH) {
-            return res.status(API_CONFIG.STATUS_CODES.BAD_REQUEST).json({
-                success: false,
-                error: {
-                    code: API_CONFIG.ERROR_CODES.VALIDATION_ERROR,
-                    message: 'Invalid currency',
-                    details: `Currency must be ${PAYMENT_CONFIG.CURRENCY.LENGTH} characters`
-                }
-            });
-        }
 
         // Validate metadata structure
         if (metadata && typeof metadata === 'object') {
@@ -194,74 +181,29 @@ router.post('/', async (req, res) => {
                     });
                 }
                 
-                // Validate order ID matches the main orderId
-                if (metadata.order.id && metadata.order.id !== order_id) {
-                    return res.status(400).json({
-                        success: false,
-                        error: {
-                            code: 'ORDER_ID_MISMATCH',
-                            message: 'Order ID mismatch',
-                            details: 'metadata.order.id must match the main orderId'
-                        }
-                    });
-                }
-            }
-
-            // Validate M-Pesa specific metadata
-            if (metadata.phoneNumber && typeof metadata.phoneNumber !== 'string') {
-                return res.status(400).json({
-                    success: false,
-                    error: {
-                        code: 'INVALID_METADATA',
-                        message: 'Invalid phone number',
-                        details: 'metadata.phoneNumber must be a string'
-                    }
-                });
             }
         }
 
         // Generate idempotency key if not provided
-        const finalIdempotencyKey = idempotencyKey || `${PAYMENT_CONFIG.IDEMPOTENCY.PREFIX}${PAYMENT_CONFIG.IDEMPOTENCY.SEPARATOR}${user_id}${PAYMENT_CONFIG.IDEMPOTENCY.SEPARATOR}${order_id}${PAYMENT_CONFIG.IDEMPOTENCY.SEPARATOR}${Date.now()}`;
-
-        // Determine payment method type and gateway
-        let paymentMethodType = 'CARD';
-        let gateway = 'stripe';
-        
-        if (paymentMethod) {
-            paymentMethodType = paymentMethod.type;
-            gateway = paymentMethodType === 'MPESA' || paymentMethodType === 'MOBILE_MONEY' ? 'mpesa' : 'stripe';
-        } else if (paymentMethodId) {
-            // Get payment method details from database to determine type
-            const methodQuery = `
-                SELECT pmt.code as type 
-                FROM user_payment_methods upm
-                JOIN payment_method_types pmt ON upm.payment_method_type_id = pmt.id
-                WHERE upm.id = $1
-            `;
-            const methodResult = await dbPoolManager.executeRead(methodQuery, [paymentMethodId]);
-            if (methodResult.rows.length > 0) {
-                paymentMethodType = methodResult.rows[0].type;
-                gateway = paymentMethodType === 'MPESA' || paymentMethodType === 'MOBILE_MONEY' ? 'mpesa' : 'stripe';
-            }
-        }
+        const finalIdempotencyKey = idempotencyKey || `ref_${user_id}_${order_id}_${Date.now()}`;
 
         // Create payment in database first
-        const query = `
-            SELECT * FROM create_payment_with_history(
-                $1, $2, $3, $4, $5, $6, $7, $8, $9
-            )
-        `;
+                    const query = `
+                        SELECT * FROM create_payment_working(
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9
+                        )
+                    `;
 
         const result = await dbPoolManager.executeWrite(query, [
             user_id,
             order_id,
             amount,
             currency,
-            paymentMethodId,
-            JSON.stringify({}), // Will be updated after gateway processing
+            null, // payment_method_id (not needed for Paystack)
+            JSON.stringify({}), // gateway_response (will be updated after processing)
             finalIdempotencyKey,
             retry,
-            JSON.stringify(metadata) // Store metadata
+            JSON.stringify(metadata) // metadata
         ]);
 
         const paymentResult = result.rows[0];
@@ -277,13 +219,12 @@ router.post('/', async (req, res) => {
             });
         }
 
-        // Process payment with gateway
+        // Process payment with Paystack
         const paymentData = {
-            paymentMethodType,
+            userId: user_id,
+            orderId: order_id,
             amount,
             currency,
-            paymentMethodId,
-            paymentMethod,
             metadata: {
                 ...metadata,
                 payment_id: paymentResult.payment_id,
@@ -292,13 +233,6 @@ router.post('/', async (req, res) => {
             },
             idempotencyKey: finalIdempotencyKey
         };
-
-        // Add M-Pesa specific fields
-        if (gateway === 'mpesa') {
-            paymentData.phoneNumber = metadata.phoneNumber || paymentMethod?.phoneNumber || metadata.user?.phone;
-            paymentData.accountReference = order_id;
-            paymentData.transactionDesc = metadata.description || metadata.order?.description || `Payment for order ${order_id}`;
-        }
 
         const gatewayResult = await processPayment(paymentData);
 
@@ -319,7 +253,7 @@ router.post('/', async (req, res) => {
             // Publish payment event
             try {
                 await publishPaymentEvent('payment_processed', {
-                    paymentId: paymentResult.payment_id,
+                    payment_id: paymentResult.payment_id,
                     orderId: order_id,
                     userId: user_id,
                     amount: amount,
@@ -353,7 +287,6 @@ router.post('/', async (req, res) => {
             amount: amount,
             currency: currency,
             status: gatewayResult.success ? gatewayResult.status : 'FAILED',
-            paymentMethodId: paymentMethodId,
             gatewayResponse: gatewayResult.success ? gatewayResult.gatewayResponse : gatewayResult.error,
             idempotencyKey: finalIdempotencyKey,
             retry: retry,
