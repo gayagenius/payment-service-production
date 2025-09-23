@@ -70,14 +70,26 @@ export const processPayment = async (paymentData) => {
  * Process Stripe payment
  */
 const processStripePayment = async (paymentData) => {
-    const { paymentMethodId, amount, currency, metadata, idempotencyKey } = paymentData;
+    const { paymentMethodId, paymentMethod, amount, currency, metadata, idempotencyKey } = paymentData;
+
+    // Flatten metadata for Stripe (Stripe only accepts string values)
+    const flattenedMetadata = {
+        gateway: 'stripe',
+        order_id: metadata.order?.id || '',
+        order_description: metadata.order?.description || '',
+        user_id: metadata.user?.id || '',
+        user_email: metadata.user?.email || '',
+        user_name: metadata.user?.name || '',
+        test_mode: metadata.testMode ? 'true' : 'false'
+    };
 
     // Create payment intent
     const paymentIntentResult = await createPaymentIntent({
         amount,
         currency,
         paymentMethodId,
-        metadata,
+        paymentMethod,
+        metadata: flattenedMetadata,
         idempotencyKey
     });
 

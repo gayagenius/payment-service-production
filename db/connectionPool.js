@@ -192,13 +192,16 @@ class DatabasePoolManager extends EventEmitter {
    * @returns {Promise<pg.Client>} Write client
    */
   async getWriteClient() {
-    if (!this.isHealthy.write) {
-      throw new Error('Write pool is not healthy');
+    // Try to connect even if health check failed
+    try {
+      const client = await this.writePool.connect();
+      this.lastWriteTime = Date.now();
+      this.isHealthy.write = true; // Mark as healthy on successful connection
+      return client;
+    } catch (error) {
+      this.isHealthy.write = false;
+      throw new Error(`Write pool connection failed: ${error.message}`);
     }
-    
-    const client = await this.writePool.connect();
-    this.lastWriteTime = Date.now();
-    return client;
   }
 
   /**

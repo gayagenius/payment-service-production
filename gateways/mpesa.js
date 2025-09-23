@@ -6,7 +6,7 @@ const MPESA_BASE_URL = process.env.MPESA_BASE_URL || 'https://sandbox.safaricom.
 const MPESA_CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY;
 const MPESA_CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET;
 const MPESA_PASSKEY = process.env.MPESA_PASSKEY;
-const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE;
+const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE || process.env.MPESA_BUSINESS_SHORTCODE;
 const MPESA_CALLBACK_URL = process.env.MPESA_CALLBACK_URL;
 
 /**

@@ -3,7 +3,7 @@ info:
   title: Payment Service API
   description: |
     A payment gateway service that handles payments, refunds, and payment methods.
-    This service provides a simulation mode for testing payment flows without real payment processors.
+    This service integrates with Stripe and M-Pesa for real payment processing in test/sandbox mode.
     
     ## Authentication
     All endpoints require Bearer JWT authentication.
@@ -14,6 +14,40 @@ info:
     ## Rate Limiting
     - 100 requests per minute per user
     - 60 requests per minute per IP address
+    
+    ## Test Cards (Stripe)
+    Use these test card numbers for testing Stripe payments:
+    
+    ### Successful Payments
+    - **Visa:** 4242424242424242
+    - **Visa (debit):** 4000056655665556
+    - **Mastercard:** 5555555555554444
+    - **American Express:** 378282246310005
+    - **Discover:** 6011111111111117
+    
+    ### Declined Payments
+    - **Generic decline:** 4000000000000002
+    - **Insufficient funds:** 4000000000009995
+    - **Lost card:** 4000000000009987
+    - **Stolen card:** 4000000000009979
+    - **Expired card:** 4000000000000069
+    
+    ### 3D Secure Authentication
+    - **Requires authentication:** 4000002500003155
+    - **Authentication fails:** 4000008400001629
+    
+    ### Test Tokens
+    Use these tokens for payment methods:
+    - `tok_visa` - Visa card
+    - `tok_visa_debit` - Visa debit card
+    - `tok_mastercard` - Mastercard
+    - `tok_amex` - American Express
+    - `tok_chargeDeclined` - Declined payment
+    - `tok_chargeDeclinedInsufficientFunds` - Insufficient funds
+    
+    ## M-Pesa Testing
+    Use your phone number for M-Pesa test payments.
+    The service will initiate STK Push to this number for testing.
     
   version: 1.0.0
   contact:
@@ -61,17 +95,23 @@ paths:
             schema:
               $ref: '#/components/schemas/PaymentCreateRequest'
             examples:
-              card_payment:
-                summary: Card payment example
+              stripe_card_success:
+                summary: Stripe Card Payment (Success)
                 value:
+                  userId: "550e8400-e29b-41d4-a716-446655440000"
+                  orderId: "order_stripe_001"
                   amount: 2500
-                  currency: "KES"
-                  paymentMethodId: "550e8400-e29b-41d4-a716-446655440000"
+                  currency: "USD"
+                  paymentMethod:
+                    type: "CARD"
+                    token: "tok_visa"
+                    brand: "VISA"
+                    last4: "4242"
                   retry: false
                   metadata:
                     order:
-                      id: "order_123"
-                      description: "Purchase of premium subscription"
+                      id: "order_stripe_001"
+                      description: "Premium subscription purchase"
                       items: ["Premium Plan", "Extra Storage"]
                       totalItems: 2
                       shippingAddress: "Nairobi, Kenya"
@@ -80,6 +120,57 @@ paths:
                       email: "user@example.com"
                       name: "John Doe"
                       phone: "+254712345678"
+                    gateway: "stripe"
+                    testMode: true
+              stripe_card_declined:
+                summary: Stripe Card Payment (Declined)
+                value:
+                  userId: "550e8400-e29b-41d4-a716-446655440001"
+                  orderId: "order_stripe_002"
+                  amount: 1000
+                  currency: "USD"
+                  paymentMethod:
+                    type: "CARD"
+                    token: "tok_chargeDeclined"
+                    brand: "VISA"
+                    last4: "0002"
+                  retry: false
+                  metadata:
+                    order:
+                      id: "order_stripe_002"
+                      description: "Test declined payment"
+                    user:
+                      id: "550e8400-e29b-41d4-a716-446655440001"
+                      email: "test@example.com"
+                      name: "Test User"
+                    gateway: "stripe"
+                    testMode: true
+              mpesa_payment:
+                summary: M-Pesa STK Push Payment
+                value:
+                  userId: "550e8400-e29b-41d4-a716-446655440002"
+                  orderId: "order_mpesa_001"
+                  amount: 5000
+                  currency: "KES"
+                  paymentMethod:
+                    type: "MPESA"
+                    phoneNumber: "254728287616"
+                  retry: false
+                  metadata:
+                    order:
+                      id: "order_mpesa_001"
+                      description: "Mobile money payment"
+                      items: ["Digital Product"]
+                      totalItems: 1
+                      shippingAddress: "Digital Delivery"
+                    user:
+                      id: "550e8400-e29b-41d4-a716-446655440002"
+                      email: "mpesa@example.com"
+                      name: "M-Pesa User"
+                      phone: "254728287616"
+                    gateway: "mpesa"
+                    phoneNumber: "254728287616"
+                    testMode: true
               one_time_payment:
                 summary: One-time payment method
                 value:
@@ -952,9 +1043,82 @@ components:
           example: "order_123"
         metadata:
           type: object
-          description: Additional metadata
+          description: Additional metadata including order and user information
+          properties:
+            order:
+              type: object
+              description: Order information (optional but recommended)
+              properties:
+                id:
+                  type: string
+                  description: Order ID (must match main orderId if provided)
+                  example: "order_123"
+                description:
+                  type: string
+                  description: Order description
+                  example: "Purchase of premium subscription"
+                items:
+                  type: array
+                  items:
+                    type: string
+                  description: List of items in the order
+                  example: ["Premium Plan", "Extra Storage"]
+                totalItems:
+                  type: integer
+                  description: Total number of items
+                  example: 2
+                shippingAddress:
+                  type: string
+                  description: Shipping address
+                  example: "Nairobi, Kenya"
+            user:
+              type: object
+              description: User information (optional but recommended)
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                  description: User ID (must match main userId if provided)
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                email:
+                  type: string
+                  format: email
+                  description: User email address
+                  example: "user@example.com"
+                name:
+                  type: string
+                  description: User full name
+                  example: "John Doe"
+                phone:
+                  type: string
+                  description: User phone number
+                  example: "+254712345678"
+            phoneNumber:
+              type: string
+              description: Phone number for M-Pesa payments
+              example: "+254712345678"
+            description:
+              type: string
+              description: Payment description
+              example: "Premium subscription purchase"
+            source:
+              type: string
+              description: Payment source
+              example: "web"
           additionalProperties: true
           example:
+            order:
+              id: "order_123"
+              description: "Purchase of premium subscription"
+              items: ["Premium Plan", "Extra Storage"]
+              totalItems: 2
+              shippingAddress: "Nairobi, Kenya"
+            user:
+              id: "550e8400-e29b-41d4-a716-446655440000"
+              email: "user@example.com"
+              name: "John Doe"
+              phone: "+254712345678"
+            phoneNumber: "+254712345678"
             description: "Premium subscription purchase"
             source: "web"
         retry:

@@ -29,7 +29,7 @@ router.get('/', async (req, res) => {
             SELECT p.id, p.user_id, p.order_id, p.amount, p.currency, p.status,
                    p.payment_method_id, p.gateway_response, p.idempotency_key,
                    p.created_at, p.updated_at
-            FROM payments_partitioned p
+            FROM payments p
             WHERE 1=1
         `;
         
@@ -105,8 +105,8 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     try {
         const {
-            user_id,
-            order_id,
+            userId: user_id,
+            orderId: order_id,
             amount,
             currency,
             paymentMethodId,
@@ -152,6 +152,73 @@ router.post('/', async (req, res) => {
             });
         }
 
+        // Validate metadata structure
+        if (metadata && typeof metadata === 'object') {
+            // Validate user information in metadata
+            if (metadata.user) {
+                if (typeof metadata.user !== 'object') {
+                    return res.status(400).json({
+                        success: false,
+                        error: {
+                            code: 'INVALID_METADATA',
+                            message: 'Invalid user metadata',
+                            details: 'metadata.user must be an object'
+                        }
+                    });
+                }
+                
+                // Validate user ID matches the main userId
+                if (metadata.user.id && metadata.user.id !== user_id) {
+                    return res.status(400).json({
+                        success: false,
+                        error: {
+                            code: 'USER_ID_MISMATCH',
+                            message: 'User ID mismatch',
+                            details: 'metadata.user.id must match the main userId'
+                        }
+                    });
+                }
+            }
+
+            // Validate order information in metadata
+            if (metadata.order) {
+                if (typeof metadata.order !== 'object') {
+                    return res.status(400).json({
+                        success: false,
+                        error: {
+                            code: 'INVALID_METADATA',
+                            message: 'Invalid order metadata',
+                            details: 'metadata.order must be an object'
+                        }
+                    });
+                }
+                
+                // Validate order ID matches the main orderId
+                if (metadata.order.id && metadata.order.id !== order_id) {
+                    return res.status(400).json({
+                        success: false,
+                        error: {
+                            code: 'ORDER_ID_MISMATCH',
+                            message: 'Order ID mismatch',
+                            details: 'metadata.order.id must match the main orderId'
+                        }
+                    });
+                }
+            }
+
+            // Validate M-Pesa specific metadata
+            if (metadata.phoneNumber && typeof metadata.phoneNumber !== 'string') {
+                return res.status(400).json({
+                    success: false,
+                    error: {
+                        code: 'INVALID_METADATA',
+                        message: 'Invalid phone number',
+                        details: 'metadata.phoneNumber must be a string'
+                    }
+                });
+            }
+        }
+
         // Generate idempotency key if not provided
         const finalIdempotencyKey = idempotencyKey || `${PAYMENT_CONFIG.IDEMPOTENCY.PREFIX}${PAYMENT_CONFIG.IDEMPOTENCY.SEPARATOR}${user_id}${PAYMENT_CONFIG.IDEMPOTENCY.SEPARATOR}${order_id}${PAYMENT_CONFIG.IDEMPOTENCY.SEPARATOR}${Date.now()}`;
 
@@ -180,7 +247,7 @@ router.post('/', async (req, res) => {
         // Create payment in database first
         const query = `
             SELECT * FROM create_payment_with_history(
-                $1, $2, $3, $4, $5, $6, $7, $8
+                $1, $2, $3, $4, $5, $6, $7, $8, $9
             )
         `;
 
@@ -192,7 +259,8 @@ router.post('/', async (req, res) => {
             paymentMethodId,
             JSON.stringify({}), // Will be updated after gateway processing
             finalIdempotencyKey,
-            retry
+            retry,
+            JSON.stringify(metadata) // Store metadata
         ]);
 
         const paymentResult = result.rows[0];
@@ -226,9 +294,9 @@ router.post('/', async (req, res) => {
 
         // Add M-Pesa specific fields
         if (gateway === 'mpesa') {
-            paymentData.phoneNumber = metadata.phoneNumber || paymentMethod?.phoneNumber;
+            paymentData.phoneNumber = metadata.phoneNumber || paymentMethod?.phoneNumber || metadata.user?.phone;
             paymentData.accountReference = order_id;
-            paymentData.transactionDesc = metadata.description || `Payment for order ${order_id}`;
+            paymentData.transactionDesc = metadata.description || metadata.order?.description || `Payment for order ${order_id}`;
         }
 
         const gatewayResult = await processPayment(paymentData);
@@ -236,7 +304,7 @@ router.post('/', async (req, res) => {
         // Update payment with gateway response
         if (gatewayResult.success) {
             const updateQuery = `
-                UPDATE payments_partitioned 
+                UPDATE payments 
                 SET status = $1, gateway_response = $2, updated_at = NOW()
                 WHERE id = $3
             `;
@@ -264,7 +332,7 @@ router.post('/', async (req, res) => {
         } else {
             // Update payment with failure status
             const updateQuery = `
-                UPDATE payments_partitioned 
+                UPDATE payments 
                 SET status = 'FAILED', gateway_response = $1, updated_at = NOW()
                 WHERE id = $2
             `;
@@ -288,13 +356,13 @@ router.post('/', async (req, res) => {
             gatewayResponse: gatewayResult.success ? gatewayResult.gatewayResponse : gatewayResult.error,
             idempotencyKey: finalIdempotencyKey,
             retry: retry,
+            metadata: metadata,
             createdAt: paymentResult.created_at,
             updatedAt: new Date().toISOString()
         };
 
         if (gatewayResult.success) {
             res.status(responseStatus).json({
-                success: true,
                 data: responseData,
                 metadata: {
                     status: responseStatus,
@@ -426,9 +494,9 @@ router.get('/user/:userId', async (req, res) => {
 
         const result = await dbPoolManager.executeRead(query, [
             userId,
-            status || null,
             limitNum,
-            offsetNum
+            offsetNum,
+            status && status !== '0' ? status : null
         ]);
 
         const payments = result.rows.map(row => ({

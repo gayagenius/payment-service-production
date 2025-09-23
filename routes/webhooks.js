@@ -159,7 +159,7 @@ router.post('/mpesa', express.json(), async (req, res) => {
 const updatePaymentFromWebhook = async (paymentId, status, gatewayResponse) => {
     try {
         const query = `
-            UPDATE payments_partitioned 
+            UPDATE payments 
             SET 
                 status = $1,
                 gateway_response = $2,

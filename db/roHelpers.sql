@@ -26,7 +26,8 @@ CREATE OR REPLACE FUNCTION create_payment_with_history(
     p_payment_method_id UUID DEFAULT NULL,
     p_gateway_response JSONB DEFAULT '{}',
     p_idempotency_key VARCHAR(255) DEFAULT NULL,
-    p_retry BOOLEAN DEFAULT FALSE
+    p_retry BOOLEAN DEFAULT FALSE,
+    p_metadata JSONB DEFAULT '{}'
 ) RETURNS TABLE(
     payment_id UUID,
     status payment_status,
@@ -62,10 +63,10 @@ BEGIN
     
     -- Check for duplicate idempotency key
     IF p_idempotency_key IS NOT NULL THEN
-        IF EXISTS (SELECT 1 FROM payments_partitioned WHERE idempotency_key = p_idempotency_key) THEN
+        IF EXISTS (SELECT 1 FROM payments WHERE idempotency_key = p_idempotency_key) THEN
             -- Return existing payment
             SELECT id, status, created_at INTO new_payment_id, payment_status, created_at
-            FROM payments_partitioned 
+            FROM payments 
             WHERE idempotency_key = p_idempotency_key;
             
             -- If retry is requested, return existing payment
@@ -82,19 +83,19 @@ BEGIN
     
     BEGIN
         -- Insert payment
-        INSERT INTO payments_partitioned (
+        INSERT INTO payments (
             user_id, order_id, amount, currency, status, 
-            payment_method_id, gateway_response, idempotency_key
+            payment_method_id, gateway_response, idempotency_key, metadata
         ) VALUES (
             p_user_id, p_order_id, p_amount, p_currency, payment_status,
-            p_payment_method_id, p_gateway_response, p_idempotency_key
+            p_payment_method_id, p_gateway_response, p_idempotency_key, p_metadata
         ) RETURNING id, created_at INTO new_payment_id, created_at;
         
         -- Insert payment history entry
         INSERT INTO payment_history (
-            payment_id, status, created_at, updated_at
+            payment_id, status, created_at, updated_at, metadata
         ) VALUES (
-            new_payment_id, payment_status, created_at, created_at
+            new_payment_id, payment_status, created_at, created_at, p_metadata
         );
         
         RETURN QUERY SELECT new_payment_id, payment_status, created_at, TRUE, NULL::TEXT;
@@ -132,22 +133,10 @@ BEGIN
         p.status, p.payment_method_id, p.gateway_response,
         p.idempotency_key, p.created_at, p.updated_at,
         TRUE as found
-    FROM payments_partitioned p
+    FROM payments p
     WHERE p.id = p_payment_id;
     
-    -- If not found in main table, check archive
-    IF NOT FOUND THEN
-        RETURN QUERY
-        SELECT 
-            pa.id, pa.user_id, pa.order_id, pa.amount, pa.currency,
-            pa.status, pa.payment_method_id, pa.gateway_response,
-            pa.idempotency_key, pa.created_at, pa.updated_at,
-            TRUE as found
-        FROM payments_archive pa
-        WHERE pa.id = p_payment_id;
-    END IF;
-    
-    -- If still not found, return NULL values
+    -- If not found in main table, return NULL values
     IF NOT FOUND THEN
         RETURN QUERY
         SELECT 
@@ -185,9 +174,9 @@ DECLARE
 BEGIN
     -- Get total count
     SELECT COUNT(*) INTO total_count
-    FROM payments_partitioned
-    WHERE user_id = p_user_id
-    AND (p_status IS NULL OR status = p_status);
+        FROM payments
+        WHERE user_id = p_user_id
+        AND (p_status IS NULL OR status = p_status);
     
     -- Return paginated results
     RETURN QUERY
@@ -196,7 +185,7 @@ BEGIN
         p.status, p.payment_method_id, p.gateway_response,
         p.idempotency_key, p.created_at, p.updated_at,
         total_count
-    FROM payments_partitioned p
+    FROM payments p
     WHERE p.user_id = p_user_id
     AND (p_status IS NULL OR p.status = p_status)
     ORDER BY p.created_at DESC
@@ -235,7 +224,7 @@ BEGIN
     BEGIN
         -- Get current status
         SELECT status INTO current_status
-        FROM payments_partitioned
+        FROM payments
         WHERE id = p_payment_id;
         
         IF current_status IS NULL THEN
@@ -244,7 +233,7 @@ BEGIN
         END IF;
         
         -- Update payment status
-        UPDATE payments_partitioned
+        UPDATE payments
         SET 
             status = p_new_status,
             updated_at = NOW(),
@@ -329,7 +318,7 @@ DECLARE
 BEGIN
     -- Get total count
     SELECT COUNT(*) INTO total_count
-    FROM payments_partitioned p
+    FROM payments p
     WHERE p.user_id = p_user_id
     AND (p_start_date IS NULL OR p.created_at >= p_start_date)
     AND (p_end_date IS NULL OR p.created_at <= p_end_date);
@@ -339,7 +328,7 @@ BEGIN
     SELECT 
         p.id, p.user_id, p.order_id, p.amount, p.currency,
         p.status, p.created_at, total_count
-    FROM payments_partitioned p
+    FROM payments p
     WHERE p.user_id = p_user_id
     AND (p_start_date IS NULL OR p.created_at >= p_start_date)
     AND (p_end_date IS NULL OR p.created_at <= p_end_date)
@@ -555,11 +544,11 @@ BEGIN
     
     -- Check for duplicate idempotency key
     IF p_idempotency_key IS NOT NULL THEN
-        IF EXISTS (SELECT 1 FROM refunds_partitioned WHERE idempotency_key = p_idempotency_key) THEN
+        IF EXISTS (SELECT 1 FROM refunds WHERE idempotency_key = p_idempotency_key) THEN
             -- Return existing refund
             SELECT id, payment_id, amount, currency, status, reason, created_at 
             INTO new_refund_id, payment_id, amount, currency, refund_status, reason, created_at
-            FROM refunds_partitioned 
+            FROM refunds 
             WHERE idempotency_key = p_idempotency_key;
             
             RETURN QUERY SELECT new_refund_id, payment_id, amount, currency, refund_status, reason, created_at, TRUE, 'Refund already exists'::TEXT;
@@ -570,7 +559,7 @@ BEGIN
     BEGIN
         -- Get payment amount
         SELECT amount INTO payment_amount
-        FROM payments_partitioned
+        FROM payments
         WHERE id = p_payment_id;
         
         IF payment_amount IS NULL THEN
@@ -580,7 +569,7 @@ BEGIN
         
         -- Get total refunded amount
         SELECT COALESCE(SUM(amount), 0) INTO total_refunded
-        FROM refunds_partitioned
+        FROM refunds
         WHERE payment_id = p_payment_id AND status = 'SUCCEEDED';
         
         -- Validate refund amount
@@ -590,7 +579,7 @@ BEGIN
         END IF;
         
         -- Insert refund
-        INSERT INTO refunds_partitioned (
+        INSERT INTO refunds (
             payment_id, amount, currency, status, reason, idempotency_key
         ) VALUES (
             p_payment_id, p_amount, p_currency, refund_status, p_reason, p_idempotency_key
@@ -628,21 +617,10 @@ BEGIN
         r.id, r.payment_id, r.amount, r.currency,
         r.status, r.reason, r.idempotency_key,
         r.created_at, r.updated_at, TRUE as found
-    FROM refunds_partitioned r
+    FROM refunds r
     WHERE r.id = p_refund_id;
     
-    -- If not found in main table, check archive
-    IF NOT FOUND THEN
-        RETURN QUERY
-        SELECT 
-            ra.id, ra.payment_id, ra.amount, ra.currency,
-            ra.status, ra.reason, ra.idempotency_key,
-            ra.created_at, ra.updated_at, TRUE as found
-        FROM refunds_archive ra
-        WHERE ra.id = p_refund_id;
-    END IF;
-    
-    -- If still not found, return NULL values
+    -- If not found in main table, return NULL values
     IF NOT FOUND THEN
         RETURN QUERY
         SELECT 
@@ -676,8 +654,8 @@ DECLARE
 BEGIN
     -- Get total count
     SELECT COUNT(*) INTO total_count
-    FROM refunds_partitioned
-    WHERE payment_id = p_payment_id;
+        FROM refunds
+        WHERE payment_id = p_payment_id;
     
     -- Return paginated results
     RETURN QUERY
@@ -685,7 +663,7 @@ BEGIN
         r.id, r.payment_id, r.amount, r.currency,
         r.status, r.reason, r.idempotency_key,
         r.created_at, r.updated_at, total_count
-    FROM refunds_partitioned r
+    FROM refunds r
     WHERE r.payment_id = p_payment_id
     ORDER BY r.created_at DESC
     LIMIT p_limit
@@ -722,7 +700,7 @@ BEGIN
     BEGIN
         -- Get current status
         SELECT status INTO current_status
-        FROM refunds_partitioned
+        FROM refunds
         WHERE id = p_refund_id;
         
         IF current_status IS NULL THEN
@@ -731,7 +709,7 @@ BEGIN
         END IF;
         
         -- Update refund status
-        UPDATE refunds_partitioned
+        UPDATE refunds
         SET 
             status = p_new_status,
             updated_at = NOW()
@@ -782,7 +760,7 @@ BEGIN
     BEGIN
         -- Get payment amount
         SELECT amount INTO payment_amount
-        FROM payments_partitioned
+        FROM payments
         WHERE id = p_payment_id;
         
         IF payment_amount IS NULL THEN
@@ -792,7 +770,7 @@ BEGIN
         
         -- Get total refunded amount
         SELECT COALESCE(SUM(amount), 0) INTO total_refunded
-        FROM refunds_partitioned
+        FROM refunds
         WHERE payment_id = p_payment_id AND status = 'SUCCEEDED';
         
         -- Calculate available amount
@@ -837,8 +815,8 @@ DECLARE
 BEGIN
     -- Get payment information
     SELECT * INTO payment_record
-    FROM payments_partitioned
-    WHERE id = p_payment_id;
+        FROM payments
+        WHERE id = p_payment_id;
     
     IF payment_record.id IS NULL THEN
         RETURN QUERY SELECT 
@@ -853,8 +831,8 @@ BEGIN
         COALESCE(SUM(amount), 0),
         COUNT(*)
     INTO total_refunded, refund_count
-    FROM refunds_partitioned
-    WHERE payment_id = p_payment_id AND status = 'SUCCEEDED';
+        FROM refunds
+        WHERE payment_id = p_payment_id AND status = 'SUCCEEDED';
     
     RETURN QUERY SELECT 
         payment_record.id,

@@ -46,7 +46,7 @@ router.post('/', async (req, res) => {
         // Get payment details
         const paymentQuery = `
             SELECT p.*, pmt.code as payment_method_type
-            FROM payments_partitioned p
+            FROM payments p
             LEFT JOIN user_payment_methods upm ON p.payment_method_id = upm.id
             LEFT JOIN payment_method_types pmt ON upm.payment_method_type_id = pmt.id
             WHERE p.id = $1
@@ -93,7 +93,7 @@ router.post('/', async (req, res) => {
         // Get existing refunds for this payment
         const existingRefundsQuery = `
             SELECT COALESCE(SUM(amount), 0) as total_refunded
-            FROM refunds_partitioned
+            FROM refunds
             WHERE payment_id = $1 AND status = 'SUCCEEDED'
         `;
 
@@ -121,22 +121,33 @@ router.post('/', async (req, res) => {
 
         // Create refund in database
         const createRefundQuery = `
-            INSERT INTO refunds_partitioned (
-                payment_id, amount, currency, status, reason, idempotency_key, created_at, updated_at
-            ) VALUES (
-                $1, $2, $3, 'PENDING', $4, $5, NOW(), NOW()
-            ) RETURNING id, created_at
+            SELECT * FROM create_refund_with_history(
+                $1, $2, $3, $4, $5, $6, $7
+            )
         `;
 
         const refundResult = await dbPoolManager.executeWrite(createRefundQuery, [
             payment_id,
             amount,
             payment.currency,
+            'PENDING',
             reason || 'Customer requested refund',
-            finalIdempotencyKey
+            finalIdempotencyKey,
+            JSON.stringify(metadata)
         ]);
 
         const refund = refundResult.rows[0];
+
+        if (!refund.success) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    code: 'REFUND_CREATION_FAILED',
+                    message: 'Failed to create refund',
+                    details: refund.error_message
+                }
+            });
+        }
 
         // Process refund with gateway
         const refundData = {
@@ -164,31 +175,26 @@ router.post('/', async (req, res) => {
         // Update refund with gateway response
         if (gatewayResult.success) {
             const updateRefundQuery = `
-                UPDATE refunds_partitioned 
-                SET 
-                    status = $1,
-                    gateway_response = $2,
-                    updated_at = NOW()
-                WHERE id = $3
+                SELECT * FROM update_refund_status($1, $2::refund_status, $3)
             `;
             
             await dbPoolManager.executeWrite(updateRefundQuery, [
+                refund.refund_id,
                 gatewayResult.status,
-                JSON.stringify(gatewayResult.gatewayResponse),
-                refund.id
+                JSON.stringify(gatewayResult.gatewayResponse)
             ]);
 
             // Update payment status if fully refunded
             if (amount === availableAmount) {
                 const updatePaymentQuery = `
-                    UPDATE payments_partitioned 
+                    UPDATE payments 
                     SET status = 'REFUNDED', updated_at = NOW()
                     WHERE id = $1
                 `;
                 await dbPoolManager.executeWrite(updatePaymentQuery, [payment_id]);
             } else {
                 const updatePaymentQuery = `
-                    UPDATE payments_partitioned 
+                    UPDATE payments 
                     SET status = 'PARTIALLY_REFUNDED', updated_at = NOW()
                     WHERE id = $1
                 `;
@@ -213,24 +219,20 @@ router.post('/', async (req, res) => {
         } else {
             // Update refund with failure status
             const updateRefundQuery = `
-                UPDATE refunds_partitioned 
-                SET 
-                    status = 'FAILED',
-                    gateway_response = $1,
-                    updated_at = NOW()
-                WHERE id = $2
+                SELECT * FROM update_refund_status($1, $2::refund_status, $3)
             `;
             
             await dbPoolManager.executeWrite(updateRefundQuery, [
-                JSON.stringify(gatewayResult.error),
-                refund.id
+                refund.refund_id,
+                'FAILED',
+                JSON.stringify(gatewayResult.error)
             ]);
         }
 
         // Return response
         const responseStatus = gatewayResult.success ? 201 : 400;
         const responseData = {
-            id: refund.id,
+            id: refund.refund_id,
             paymentId: payment_id,
             amount: amount,
             currency: payment.currency,
@@ -238,7 +240,7 @@ router.post('/', async (req, res) => {
             reason: reason || 'Customer requested refund',
             gatewayResponse: gatewayResult.success ? gatewayResult.gatewayResponse : gatewayResult.error,
             idempotencyKey: finalIdempotencyKey,
-            createdAt: refund.created_at,
+            createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
 
@@ -298,7 +300,7 @@ router.get('/', async (req, res) => {
         let query = `
             SELECT r.id, r.payment_id, r.amount, r.currency, r.status, r.reason,
                    r.gateway_response, r.idempotency_key, r.created_at, r.updated_at
-            FROM refunds_partitioned r
+            FROM refunds r
             WHERE 1=1
         `;
         
@@ -387,7 +389,7 @@ router.get('/:id', async (req, res) => {
         }
 
         const query = `
-            SELECT * FROM refunds_partitioned WHERE id = $1
+            SELECT * FROM refunds WHERE id = $1
         `;
 
         const result = await dbPoolManager.executeRead(query, [id]);

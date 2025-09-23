@@ -41,20 +41,46 @@ const mapStripeRefundStatus = (stripeStatus) => {
  */
 export const createPaymentIntent = async (paymentData) => {
     try {
-        const { amount, currency, paymentMethodId, metadata, idempotencyKey } = paymentData;
+        const { amount, currency, paymentMethodId, paymentMethod, metadata, idempotencyKey } = paymentData;
+
+        // If no payment method ID is provided, create a payment method from the payment method data
+        let finalPaymentMethodId = paymentMethodId;
+        
+        if (!finalPaymentMethodId && paymentMethod) {
+            const paymentMethodResult = await createPaymentMethod(paymentMethod);
+            if (!paymentMethodResult.success) {
+                return paymentMethodResult;
+            }
+            finalPaymentMethodId = paymentMethodResult.paymentMethodId;
+        }
+
+        if (!finalPaymentMethodId) {
+            return {
+                success: false,
+                error: {
+                    code: 'MISSING_PAYMENT_METHOD',
+                    message: 'Payment method ID or payment method data is required',
+                    type: 'validation_error'
+                }
+            };
+        }
 
         const paymentIntent = await stripe.paymentIntents.create({
             amount: amount,
             currency: currency.toLowerCase(),
-            payment_method: paymentMethodId,
+            payment_method: finalPaymentMethodId,
             confirmation_method: 'manual',
             confirm: true,
+            return_url: 'https://nonoffensive-suasively-lorri.ngrok-free.dev/payments/return',
             metadata: {
-                ...metadata,
-                idempotency_key: idempotencyKey,
-                gateway: 'stripe'
-            },
-            idempotency_key: idempotencyKey
+                gateway: 'stripe',
+                order_id: metadata.order?.id || '',
+                order_description: metadata.order?.description || '',
+                user_id: metadata.user?.id || '',
+                user_email: metadata.user?.email || '',
+                user_name: metadata.user?.name || '',
+                test_mode: metadata.testMode ? 'true' : 'false'
+            }
         }, {
             idempotencyKey: idempotencyKey
         });
@@ -101,12 +127,12 @@ export const createPaymentMethod = async (paymentMethodData) => {
             paymentMethod = await stripe.paymentMethods.create({
                 type: 'card',
                 card: {
-                    token: token
+                    token: token || 'tok_visa' // Use default test token if none provided
                 },
                 metadata: {
-                    ...metadata,
                     brand: brand,
-                    last4: last4
+                    last4: last4,
+                    gateway: 'stripe'
                 }
             });
         } else if (type === 'WALLET') {
@@ -117,8 +143,8 @@ export const createPaymentMethod = async (paymentMethodData) => {
                     token: token
                 },
                 metadata: {
-                    ...metadata,
-                    wallet_type: 'digital_wallet'
+                    wallet_type: 'digital_wallet',
+                    gateway: 'stripe'
                 }
             });
         }

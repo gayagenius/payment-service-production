@@ -24,6 +24,10 @@ app.use("/webhooks", webhooks);
 app.use("/queue", queueHealthRouter);
 app.use("/test", testRouter);
 
+// Serve Swagger UI on main port
+app.use('/docs', express.static('docs'));
+app.use('/api', express.static('api'));
+
 // Health check route
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "Payment service is running 🚀" });
