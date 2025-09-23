@@ -1,10 +1,11 @@
 import 'dotenv/config';
 import express from "express";
 import bodyParser from "body-parser";
-import payments from "../routes/payments.js";
+import payments from "../routes/payments-integrated.js";
 import refunds from "../routes/refunds.js";
 import methods from "../routes/methods.js";
 import paymentHistory from "../routes/paymentHistory.js";
+import webhooks from "../routes/webhooks.js";
 import queueHealthRouter from "../routes/queueHealth.js"
 import testRouter from "../routes/test.js"; 
 import { connect } from "../messaging/queueSetup.js";
@@ -17,8 +18,10 @@ app.use(bodyParser.json());
 app.use("/payments", payments);
 app.use("/refunds", refunds);
 app.use("/methods", methods);
+app.use("/payment", methods); // Add payment types route
 app.use("/payment-history", paymentHistory);
-app.use("/queue", queueHealthRouter); 
+app.use("/webhooks", webhooks);
+app.use("/queue", queueHealthRouter);
 app.use("/test", testRouter);
 
 // Health check route
