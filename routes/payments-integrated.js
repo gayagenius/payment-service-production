@@ -3,6 +3,7 @@ import dbPoolManager from '../db/connectionPool.js';
 import { API_CONFIG, PAYMENT_CONFIG, SECURITY_CONFIG } from '../config/constants.js';
 import { processPayment, createPaymentMethodForGateway } from '../services/paymentProcessor.js';
 import { publishPaymentEvent } from '../messaging/publishPaymentEvent.js';
+import methodsRouter from './methods.js';
 
 const router = express.Router();
 
@@ -393,6 +394,11 @@ router.post('/', async (req, res) => {
         });
     }
 });
+
+/**
+ * GET /payments/methods - Use methods router
+ */
+router.use('/methods', methodsRouter);
 
 /**
  * GET /payments/{id} - Get payment by ID

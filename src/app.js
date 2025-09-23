@@ -18,6 +18,7 @@ app.use(bodyParser.json());
 app.use("/payments", payments);
 app.use("/refunds", refunds);
 app.use("/methods", methods);
+app.use("/payments/methods", methods); // Add payment methods route under payments
 app.use("/payment", methods); // Add payment types route
 app.use("/payment-history", paymentHistory);
 app.use("/webhooks", webhooks);
