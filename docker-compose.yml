@@ -31,8 +31,8 @@ services:
      - /var/lib/docker/containers:/var/lib/docker/containers:ro
      - ./promtail-config.yaml:/etc/promtail/config.yaml:ro
     command: -config.file=/etc/promtail/config.yaml
-  depends_on:
-  - loki
+    depends_on:
+      - loki
 
   grafana:
     image: grafana/grafana:latest
@@ -46,6 +46,7 @@ services:
   rabbitmq:
     image: rabbitmq:3-management
     container_name: payment-service-rabbitmq
+    hostname: rabbitmq
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -88,7 +89,7 @@ services:
     command: npm run dev
 
 volumes:
-payment_service_db:
-rabbitmq_data:
-grafana_data:
-loki_data:
+  payment_service_db: {}
+  rabbitmq_data: {}
+  grafana_data: {}
+  loki_data: {}

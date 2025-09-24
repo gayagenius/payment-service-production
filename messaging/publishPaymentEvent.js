@@ -1,15 +1,20 @@
-import { publish } from './queueSetup.js';
+import { publish } from "./queueSetup.js";
 
 /**
  * Publishes a payment event to the RabbitMQ queue.
- * @param {string} eventType - The type of event, e.g. "payment_initiated"
- * @param {Object} payload - The payment data payload
+ * @param {string} eventType - The type of event type e.g payment_iniatiated
+ * @param {object} payload - The payment data payload.
  */
-export const publishPaymentEvent = (eventType, payload) => {
+export const publishPaymentEvent = (eventType, { paymentId, orderId, userId, amount, status, correlationId }) => {
   const eventPayload = {
     eventType,
     timestamp: new Date().toISOString(),
-    ...payload,
+    paymentId,
+    orderId,
+    userId,
+    amount,
+    status,
+    correlationId
   };
 
   publish(eventType, eventPayload);
