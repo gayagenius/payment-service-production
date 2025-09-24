@@ -1,286 +1,231 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createPaymentIntent, createPaymentMethod, processRefund, verifyWebhook, handleWebhook } from '../gateways/stripe.js';
-import { initiateSTKPush, processRefund as mpesaRefund, validatePhoneNumber } from '../gateways/mpesa.js';
+import { initializePayment, verifyPayment, processRefund, verifyWebhook, handleWebhook } from '../gateways/paystack.js';
 
-// Mock Stripe
-vi.mock('stripe', () => {
-    return {
-        default: vi.fn(() => ({
-            paymentIntents: {
-                create: vi.fn()
-            },
-            paymentMethods: {
-                create: vi.fn()
-            },
-            refunds: {
-                create: vi.fn()
-            },
-            webhooks: {
-                constructEvent: vi.fn()
-            }
-        }))
-    };
-});
-
-// Mock axios for M-Pesa
-vi.mock('axios', () => ({
-    default: {
-        get: vi.fn(),
-        post: vi.fn()
-    }
+// Mock node-fetch for Paystack
+vi.mock('node-fetch', () => ({
+    default: vi.fn()
 }));
 
-describe('Stripe Gateway', () => {
+describe('Paystack Gateway', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
 
-    describe('createPaymentIntent', () => {
-        it('should create payment intent successfully', async () => {
+    describe('initializePayment', () => {
+        it('should initialize payment successfully', async () => {
             const paymentData = {
                 amount: 2500,
                 currency: 'USD',
-                paymentMethodId: 'pm_1234567890',
+                email: 'test@example.com',
+                reference: 'ref_1234567890',
                 metadata: { order_id: 'order_123' },
-                idempotencyKey: 'test_key_123'
+                callback_url: 'http://localhost:8888/payments/return'
             };
 
-            const mockPaymentIntent = {
-                id: 'pi_1234567890',
-                status: 'succeeded',
-                client_secret: 'pi_1234567890_secret_abc123',
-                charges: {
-                    data: [{
-                        id: 'ch_1234567890',
-                        status: 'succeeded',
-                        amount: 2500,
-                        currency: 'usd'
-                    }]
-                }
+            const mockResponse = {
+                ok: true,
+                json: vi.fn().mockResolvedValue({
+                    status: true,
+                    message: 'Authorization URL created',
+                    data: {
+                        reference: 'ref_1234567890',
+                        access_code: 'access_code_123',
+                        authorization_url: 'https://checkout.paystack.com/access_code_123'
+                    }
+                })
             };
 
-            const { default: Stripe } = await import('stripe');
-            const mockStripe = new Stripe();
-            mockStripe.paymentIntents.create.mockResolvedValue(mockPaymentIntent);
+            const fetch = await import('node-fetch');
+            fetch.default.mockResolvedValue(mockResponse);
 
-            const result = await createPaymentIntent(paymentData);
+            const result = await initializePayment(paymentData);
 
             expect(result.success).toBe(true);
-            expect(result.transactionId).toBe('pi_1234567890');
-            expect(result.status).toBe('SUCCEEDED');
-            expect(result.gatewayResponse.payment_intent_id).toBe('pi_1234567890');
+            expect(result.transactionId).toBe('ref_1234567890');
+            expect(result.status).toBe('PENDING');
+            expect(result.gatewayResponse.reference).toBe('ref_1234567890');
         });
 
-        it('should handle payment intent creation failure', async () => {
+        it('should handle payment initialization failure', async () => {
             const paymentData = {
                 amount: 2500,
                 currency: 'USD',
-                paymentMethodId: 'pm_invalid'
+                email: 'test@example.com',
+                reference: 'ref_invalid'
             };
 
-            const { default: Stripe } = await import('stripe');
-            const mockStripe = new Stripe();
-            mockStripe.paymentIntents.create.mockRejectedValue({
-                code: 'card_declined',
-                message: 'Your card was declined.',
-                type: 'card_error'
-            });
+            const mockResponse = {
+                ok: false,
+                json: vi.fn().mockResolvedValue({
+                    status: false,
+                    message: 'Invalid reference'
+                })
+            };
 
-            const result = await createPaymentIntent(paymentData);
+            const fetch = await import('node-fetch');
+            fetch.default.mockResolvedValue(mockResponse);
+
+            const result = await initializePayment(paymentData);
 
             expect(result.success).toBe(false);
-            expect(result.error.code).toBe('card_declined');
-            expect(result.error.message).toBe('Your card was declined.');
+            expect(result.error.code).toBe('PAYSTACK_ERROR');
+            expect(result.error.message).toBe('Invalid reference');
         });
     });
 
-    describe('createPaymentMethod', () => {
-        it('should create card payment method successfully', async () => {
-            const paymentMethodData = {
-                type: 'CARD',
-                token: 'tok_1234567890',
-                brand: 'VISA',
-                last4: '4242',
-                metadata: { user_id: 'user_123' }
+    describe('verifyPayment', () => {
+        it('should verify payment successfully', async () => {
+            const reference = 'ref_1234567890';
+
+            const mockResponse = {
+                ok: true,
+                json: vi.fn().mockResolvedValue({
+                    status: true,
+                    data: {
+                        reference: 'ref_1234567890',
+                        status: 'success',
+                        amount: 2500,
+                        currency: 'USD',
+                        customer: { email: 'test@example.com' },
+                        authorization: { authorization_code: 'auth_123' },
+                        channel: 'card',
+                        paid_at: '2023-01-01T00:00:00Z',
+                        created_at: '2023-01-01T00:00:00Z'
+                    }
+                })
             };
 
-            const mockPaymentMethod = {
-                id: 'pm_1234567890',
-                type: 'card',
-                card: {
-                    brand: 'VISA',
-                    last4: '4242',
-                    exp_month: 12,
-                    exp_year: 2025
-                }
-            };
+            const fetch = await import('node-fetch');
+            fetch.default.mockResolvedValue(mockResponse);
 
-            const { default: Stripe } = await import('stripe');
-            const mockStripe = new Stripe();
-            mockStripe.paymentMethods.create.mockResolvedValue(mockPaymentMethod);
-
-            const result = await createPaymentMethod(paymentMethodData);
+            const result = await verifyPayment(reference);
 
             expect(result.success).toBe(true);
-            expect(result.paymentMethodId).toBe('pm_1234567890');
-            expect(result.gatewayResponse.type).toBe('card');
+            expect(result.transactionId).toBe('ref_1234567890');
+            expect(result.status).toBe('SUCCEEDED');
+            expect(result.gatewayResponse.reference).toBe('ref_1234567890');
         });
     });
 
     describe('processRefund', () => {
         it('should process refund successfully', async () => {
             const refundData = {
-                paymentIntentId: 'pi_1234567890',
+                transactionId: 'ref_1234567890',
                 amount: 1000,
-                reason: 'Customer requested refund',
-                metadata: { refund_id: 'refund_123' },
-                idempotencyKey: 'refund_key_123'
+                reason: 'Customer requested refund'
             };
 
-            const mockRefund = {
-                id: 're_1234567890',
-                status: 'succeeded',
-                amount: 1000,
-                currency: 'usd',
-                reason: 'requested_by_customer'
+            const mockResponse = {
+                ok: true,
+                json: vi.fn().mockResolvedValue({
+                    status: true,
+                    data: {
+                        id: 'refund_1234567890',
+                        status: 'success',
+                        amount: 1000,
+                        currency: 'USD',
+                        transaction: { id: 'ref_1234567890' },
+                        created_at: '2023-01-01T00:00:00Z'
+                    }
+                })
             };
 
-            const { default: Stripe } = await import('stripe');
-            const mockStripe = new Stripe();
-            mockStripe.refunds.create.mockResolvedValue(mockRefund);
+            const fetch = await import('node-fetch');
+            fetch.default.mockResolvedValue(mockResponse);
 
             const result = await processRefund(refundData);
 
             expect(result.success).toBe(true);
-            expect(result.refundId).toBe('re_1234567890');
+            expect(result.refundId).toBe('refund_1234567890');
             expect(result.status).toBe('SUCCEEDED');
         });
     });
 });
 
-describe('M-Pesa Gateway', () => {
+describe('Webhook Handling', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
 
-    describe('validatePhoneNumber', () => {
-        it('should validate Kenyan phone numbers correctly', () => {
-            // Test different formats
-            expect(validatePhoneNumber('254712345678')).toEqual({
-                valid: true,
-                formatted: '254712345678'
+    describe('verifyWebhook', () => {
+        it('should verify webhook signature correctly', () => {
+            const payload = '{"event":"charge.success","data":{"reference":"ref_123"}}';
+            const signature = 'test_signature';
+            
+            // Mock crypto module
+            const crypto = require('crypto');
+            vi.spyOn(crypto, 'createHmac').mockReturnValue({
+                update: vi.fn().mockReturnThis(),
+                digest: vi.fn().mockReturnValue('test_signature')
             });
 
-            expect(validatePhoneNumber('0712345678')).toEqual({
-                valid: true,
-                formatted: '254712345678'
-            });
-
-            expect(validatePhoneNumber('712345678')).toEqual({
-                valid: true,
-                formatted: '254712345678'
-            });
-
-            expect(validatePhoneNumber('123456789')).toEqual({
-                valid: false,
-                error: 'Invalid phone number format. Expected: 254XXXXXXXXX, 07XXXXXXXX, or 7XXXXXXXX'
-            });
+            const result = verifyWebhook(payload, signature);
+            expect(result).toBe(true);
         });
     });
 
-    describe('initiateSTKPush', () => {
-        it('should initiate STK push successfully', async () => {
-            const paymentData = {
-                amount: 1000,
-                phoneNumber: '254712345678',
-                accountReference: 'order_123',
-                transactionDesc: 'Test payment',
-                metadata: { order_id: 'order_123' },
-                idempotencyKey: 'test_key_123'
-            };
-
-            const mockResponse = {
+    describe('handleWebhook', () => {
+        it('should handle charge.success event', async () => {
+            const event = {
+                event: 'charge.success',
                 data: {
-                    ResponseCode: '0',
-                    CheckoutRequestID: 'ws_CO_1234567890',
-                    MerchantRequestID: 'ws_MerchantRequestID_123',
-                    ResponseDescription: 'Success. Request accepted for processing',
-                    CustomerMessage: 'Success. Request accepted for processing'
+                    reference: 'ref_1234567890',
+                    amount: 2500,
+                    currency: 'USD'
                 }
             };
 
-            const axios = await import('axios');
-            axios.default.post.mockResolvedValue(mockResponse);
-            axios.default.get.mockResolvedValue({
-                data: { access_token: 'test_token', expires_in: 3600 }
-            });
-
-            const result = await initiateSTKPush(paymentData);
+            const result = await handleWebhook(event);
 
             expect(result.success).toBe(true);
-            expect(result.transactionId).toBe('ws_CO_1234567890');
-            expect(result.status).toBe('PENDING');
+            expect(result.transactionId).toBe('ref_1234567890');
+            expect(result.status).toBe('SUCCEEDED');
         });
 
-        it('should handle STK push failure', async () => {
-            const paymentData = {
-                amount: 1000,
-                phoneNumber: '254712345678',
-                accountReference: 'order_123',
-                transactionDesc: 'Test payment'
-            };
-
-            const mockResponse = {
+        it('should handle charge.failed event', async () => {
+            const event = {
+                event: 'charge.failed',
                 data: {
-                    ResponseCode: '1',
-                    ResponseDescription: 'Unable to lock subscriber'
+                    reference: 'ref_1234567890',
+                    amount: 2500,
+                    currency: 'USD'
                 }
             };
 
-            const axios = await import('axios');
-            axios.default.post.mockResolvedValue(mockResponse);
-            axios.default.get.mockResolvedValue({
-                data: { access_token: 'test_token', expires_in: 3600 }
-            });
+            const result = await handleWebhook(event);
 
-            const result = await initiateSTKPush(paymentData);
+            expect(result.success).toBe(true);
+            expect(result.transactionId).toBe('ref_1234567890');
+            expect(result.status).toBe('FAILED');
+        });
+
+        it('should handle refund.processed event', async () => {
+            const event = {
+                event: 'refund.processed',
+                data: {
+                    id: 'refund_1234567890',
+                    transaction: { reference: 'ref_1234567890' },
+                    amount: 1000
+                }
+            };
+
+            const result = await handleWebhook(event);
+
+            expect(result.success).toBe(true);
+            expect(result.refundId).toBe('refund_1234567890');
+            expect(result.status).toBe('SUCCEEDED');
+        });
+
+        it('should handle unknown event', async () => {
+            const event = {
+                event: 'unknown.event',
+                data: {}
+            };
+
+            const result = await handleWebhook(event);
 
             expect(result.success).toBe(false);
-            expect(result.error.code).toBe('MPESA_STK_PUSH_FAILED');
-        });
-    });
-
-    describe('processRefund', () => {
-        it('should process M-Pesa refund successfully', async () => {
-            const refundData = {
-                transactionId: 'ws_CO_1234567890',
-                amount: 500,
-                phoneNumber: '254712345678',
-                remarks: 'Customer requested refund',
-                metadata: { refund_id: 'refund_123' },
-                idempotencyKey: 'refund_key_123'
-            };
-
-            const mockResponse = {
-                data: {
-                    ResponseCode: '0',
-                    OriginatorConversationID: 'ref_1234567890',
-                    ConversationID: 'conv_1234567890',
-                    ResponseDescription: 'Accept the service request successfully.'
-                }
-            };
-
-            const axios = await import('axios');
-            axios.default.post.mockResolvedValue(mockResponse);
-            axios.default.get.mockResolvedValue({
-                data: { access_token: 'test_token', expires_in: 3600 }
-            });
-
-            const result = await mpesaRefund(refundData);
-
-            expect(result.success).toBe(true);
-            expect(result.refundId).toBe('ref_1234567890');
-            expect(result.status).toBe('PENDING');
+            expect(result.error.code).toBe('UNKNOWN_EVENT');
         });
     });
 });

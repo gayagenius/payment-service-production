@@ -1,18 +1,21 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { processPayment, createPaymentMethodForGateway, processRefundForGateway } from '../services/paymentProcessor.js';
-import { createPaymentIntent, createPaymentMethod, processRefund } from '../gateways/stripe.js';
-import { initiateSTKPush, processRefund as mpesaRefund } from '../gateways/mpesa.js';
+import { initializePayment, verifyPayment, processRefund } from '../gateways/paystack.js';
 
 // Mock the gateway functions
-vi.mock('../gateways/stripe.js', () => ({
-    createPaymentIntent: vi.fn(),
-    createPaymentMethod: vi.fn(),
-    processRefund: vi.fn()
-}));
-
-vi.mock('../gateways/mpesa.js', () => ({
-    initiateSTKPush: vi.fn(),
-    processRefund: vi.fn()
+vi.mock('../gateways/paystack.js', () => ({
+    initializePayment: vi.fn(),
+    verifyPayment: vi.fn(),
+    processRefund: vi.fn(),
+    getSupportedPaymentMethods: vi.fn(() => [
+        { type: 'CARD', name: 'Credit/Debit Card' },
+        { type: 'BANK_TRANSFER', name: 'Bank Transfer' }
+    ]),
+    getSupportedCurrencies: vi.fn(() => [
+        { code: 'NGN', name: 'Nigerian Naira' },
+        { code: 'USD', name: 'US Dollar' },
+        { code: 'KES', name: 'Kenyan Shilling' }
+    ])
 }));
 
 describe('Payment Processing', () => {
@@ -21,250 +24,225 @@ describe('Payment Processing', () => {
     });
 
     describe('processPayment', () => {
-        it('should process Stripe card payment successfully', async () => {
+        it('should process Paystack payment successfully', async () => {
             const paymentData = {
-                paymentMethodType: 'CARD',
+                userId: 'user_123',
+                orderId: 'order_123',
                 amount: 2500,
                 currency: 'USD',
-                paymentMethodId: 'pm_1234567890',
                 metadata: { order_id: 'order_123' },
                 idempotencyKey: 'test_key_123'
             };
 
-            createPaymentIntent.mockResolvedValue({
+            initializePayment.mockResolvedValue({
                 success: true,
-                transactionId: 'pi_1234567890',
-                status: 'SUCCEEDED',
-                gatewayResponse: {
-                    payment_intent_id: 'pi_1234567890',
-                    status: 'succeeded'
-                }
-            });
-
-            const result = await processPayment(paymentData);
-
-            expect(result.success).toBe(true);
-            expect(result.transactionId).toBe('pi_1234567890');
-            expect(result.status).toBe('SUCCEEDED');
-            expect(result.gateway).toBe('stripe');
-            expect(createPaymentIntent).toHaveBeenCalledWith({
-                amount: 2500,
-                currency: 'USD',
-                paymentMethodId: 'pm_1234567890',
-                metadata: { order_id: 'order_123' },
-                idempotencyKey: 'test_key_123'
-            });
-        });
-
-        it('should process M-Pesa payment successfully', async () => {
-            const paymentData = {
-                paymentMethodType: 'MPESA',
-                amount: 1000,
-                currency: 'KES',
-                phoneNumber: '254712345678',
-                accountReference: 'order_456',
-                transactionDesc: 'Test payment',
-                metadata: { order_id: 'order_456' },
-                idempotencyKey: 'test_key_456'
-            };
-
-            initiateSTKPush.mockResolvedValue({
-                success: true,
-                transactionId: 'ws_CO_1234567890',
+                transactionId: 'ref_1234567890',
                 status: 'PENDING',
                 gatewayResponse: {
-                    checkout_request_id: 'ws_CO_1234567890',
-                    response_code: '0'
+                    reference: 'ref_1234567890',
+                    access_code: 'access_code_123',
+                    authorization_url: 'https://checkout.paystack.com/access_code_123'
                 }
             });
 
             const result = await processPayment(paymentData);
 
             expect(result.success).toBe(true);
-            expect(result.transactionId).toBe('ws_CO_1234567890');
+            expect(result.transactionId).toBe('ref_1234567890');
             expect(result.status).toBe('PENDING');
-            expect(result.gateway).toBe('mpesa');
-            expect(initiateSTKPush).toHaveBeenCalledWith({
-                amount: 1000,
-                phoneNumber: '254712345678',
-                accountReference: 'order_456',
-                transactionDesc: 'Test payment',
-                metadata: { order_id: 'order_456' },
-                idempotencyKey: 'test_key_456'
+            expect(result.gateway).toBe('paystack');
+            expect(initializePayment).toHaveBeenCalledWith({
+                amount: 2500,
+                currency: 'USD',
+                email: 'user_123@example.com',
+                reference: 'test_key_123',
+                metadata: {
+                    user_id: 'user_123',
+                    order_id: 'order_123'
+                },
+                callback_url: '//payments/return'
             });
         });
 
-        it('should reject M-Pesa payment with non-KES currency', async () => {
+        it('should process KES payment successfully', async () => {
             const paymentData = {
-                paymentMethodType: 'MPESA',
+                userId: 'user_456',
+                orderId: 'order_456',
                 amount: 1000,
-                currency: 'USD',
-                phoneNumber: '254712345678'
+                currency: 'KES',
+                metadata: { order_id: 'order_456' },
+                idempotencyKey: 'test_key_456'
+            };
+
+            initializePayment.mockResolvedValue({
+                success: true,
+                transactionId: 'ref_4567890123',
+                status: 'PENDING',
+                gatewayResponse: {
+                    reference: 'ref_4567890123',
+                    access_code: 'access_code_456',
+                    authorization_url: 'https://checkout.paystack.com/access_code_456'
+                }
+            });
+
+            const result = await processPayment(paymentData);
+
+            expect(result.success).toBe(true);
+            expect(result.transactionId).toBe('ref_4567890123');
+            expect(result.status).toBe('PENDING');
+            expect(result.gateway).toBe('paystack');
+            expect(initializePayment).toHaveBeenCalledWith({
+                amount: 1000,
+                currency: 'KES',
+                email: 'user_456@example.com',
+                reference: 'test_key_456',
+                metadata: {
+                    user_id: 'user_456',
+                    order_id: 'order_456'
+                },
+                callback_url: '//payments/return'
+            });
+        });
+
+        it('should reject payment with unsupported currency', async () => {
+            const paymentData = {
+                userId: 'user_123',
+                orderId: 'order_123',
+                amount: 1000,
+                currency: 'INVALID_CURRENCY'
             };
 
             const result = await processPayment(paymentData);
 
             expect(result.success).toBe(false);
             expect(result.error.code).toBe('INVALID_CURRENCY');
-            expect(result.error.message).toBe('M-Pesa only supports KES currency');
+            expect(result.error.message).toBe('Currency not supported');
         });
 
-        it('should reject M-Pesa payment with amount below minimum', async () => {
+        it('should reject payment with amount below minimum', async () => {
             const paymentData = {
-                paymentMethodType: 'MPESA',
-                amount: 0,
-                currency: 'KES',
-                phoneNumber: '254712345678'
+                userId: 'user_123',
+                orderId: 'order_123',
+                amount: 0.5,
+                currency: 'USD'
             };
 
             const result = await processPayment(paymentData);
 
             expect(result.success).toBe(false);
             expect(result.error.code).toBe('INVALID_AMOUNT');
-            expect(result.error.message).toBe('M-Pesa minimum amount is 1 KES');
+            expect(result.error.message).toBe('Amount must be at least 1');
         });
 
-        it('should handle Stripe payment failure', async () => {
+        it('should handle Paystack payment failure', async () => {
             const paymentData = {
-                paymentMethodType: 'CARD',
+                userId: 'user_123',
+                orderId: 'order_123',
                 amount: 2500,
-                currency: 'USD',
-                paymentMethodId: 'pm_invalid'
+                currency: 'USD'
             };
 
-            createPaymentIntent.mockResolvedValue({
+            initializePayment.mockResolvedValue({
                 success: false,
                 error: {
-                    code: 'card_declined',
-                    message: 'Your card was declined.',
-                    type: 'card_error'
+                    code: 'PAYSTACK_ERROR',
+                    message: 'Payment initialization failed',
+                    type: 'payment_error'
                 }
             });
 
             const result = await processPayment(paymentData);
 
             expect(result.success).toBe(false);
-            expect(result.error.code).toBe('card_declined');
-            expect(result.error.message).toBe('Your card was declined.');
+            expect(result.error.code).toBe('PAYSTACK_ERROR');
+            expect(result.error.message).toBe('Payment initialization failed');
         });
     });
 
     describe('createPaymentMethodForGateway', () => {
-        it('should create Stripe payment method successfully', async () => {
+        it('should create payment method successfully', async () => {
             const paymentMethodData = {
                 type: 'CARD',
-                token: 'tok_1234567890',
-                brand: 'VISA',
-                last4: '4242',
-                metadata: { user_id: 'user_123' },
-                gateway: 'stripe'
+                gateway: 'paystack'
             };
-
-            createPaymentMethod.mockResolvedValue({
-                success: true,
-                paymentMethodId: 'pm_1234567890',
-                gatewayResponse: {
-                    payment_method_id: 'pm_1234567890',
-                    type: 'card',
-                    card: {
-                        brand: 'VISA',
-                        last4: '4242'
-                    }
-                }
-            });
 
             const result = await createPaymentMethodForGateway(paymentMethodData);
 
             expect(result.success).toBe(true);
-            expect(result.paymentMethodId).toBe('pm_1234567890');
-            expect(createPaymentMethod).toHaveBeenCalledWith(paymentMethodData);
+            expect(result.paymentMethodId).toMatch(/^pm_/);
+            expect(result.gatewayResponse.type).toBe('CARD');
+            expect(result.gatewayResponse.gateway).toBe('paystack');
         });
 
-        it('should create M-Pesa payment method (mock)', async () => {
+        it('should create payment method for any gateway', async () => {
             const paymentMethodData = {
-                type: 'MPESA',
-                phoneNumber: '254712345678',
-                gateway: 'mpesa'
+                type: 'BANK_TRANSFER',
+                gateway: 'paystack'
             };
 
             const result = await createPaymentMethodForGateway(paymentMethodData);
 
             expect(result.success).toBe(true);
-            expect(result.paymentMethodId).toMatch(/^mpesa_/);
-            expect(result.gatewayResponse.type).toBe('MPESA');
+            expect(result.paymentMethodId).toMatch(/^pm_/);
+            expect(result.gatewayResponse.type).toBe('BANK_TRANSFER');
         });
     });
 
     describe('processRefundForGateway', () => {
-        it('should process Stripe refund successfully', async () => {
+        it('should process Paystack refund successfully', async () => {
             const refundData = {
-                gateway: 'stripe',
-                transactionId: 'pi_1234567890',
+                transactionId: 'ref_1234567890',
                 amount: 1000,
-                reason: 'Customer requested refund',
-                metadata: { refund_id: 'refund_123' },
-                idempotencyKey: 'refund_key_123'
+                reason: 'Customer requested refund'
             };
 
             processRefund.mockResolvedValue({
                 success: true,
-                refundId: 're_1234567890',
+                refundId: 'refund_1234567890',
                 status: 'SUCCEEDED',
                 gatewayResponse: {
-                    refund_id: 're_1234567890',
-                    status: 'succeeded',
-                    amount: 1000
+                    refund_id: 'refund_1234567890',
+                    transaction_id: 'ref_1234567890',
+                    amount: 1000,
+                    currency: 'USD',
+                    status: 'success',
+                    created_at: '2023-01-01T00:00:00Z'
                 }
             });
 
             const result = await processRefundForGateway(refundData);
 
             expect(result.success).toBe(true);
-            expect(result.refundId).toBe('re_1234567890');
+            expect(result.refundId).toBe('refund_1234567890');
             expect(result.status).toBe('SUCCEEDED');
             expect(processRefund).toHaveBeenCalledWith({
-                paymentIntentId: 'pi_1234567890',
+                transactionId: 'ref_1234567890',
                 amount: 1000,
-                reason: 'Customer requested refund',
-                metadata: { refund_id: 'refund_123' },
-                idempotencyKey: 'refund_key_123'
+                reason: 'Customer requested refund'
             });
         });
 
-        it('should process M-Pesa refund successfully', async () => {
+        it('should handle refund failure', async () => {
             const refundData = {
-                gateway: 'mpesa',
-                transactionId: 'ws_CO_1234567890',
-                amount: 500,
-                phoneNumber: '254712345678',
-                remarks: 'Customer requested refund',
-                metadata: { refund_id: 'refund_456' },
-                idempotencyKey: 'refund_key_456'
+                transactionId: 'ref_invalid',
+                amount: 1000,
+                reason: 'Customer requested refund'
             };
 
-            mpesaRefund.mockResolvedValue({
-                success: true,
-                refundId: 'ref_1234567890',
-                status: 'PENDING',
-                gatewayResponse: {
-                    originator_conversation_id: 'ref_1234567890',
-                    response_code: '0'
+            processRefund.mockResolvedValue({
+                success: false,
+                error: {
+                    code: 'PAYSTACK_ERROR',
+                    message: 'Refund failed',
+                    type: 'refund_error'
                 }
             });
 
             const result = await processRefundForGateway(refundData);
 
-            expect(result.success).toBe(true);
-            expect(result.refundId).toBe('ref_1234567890');
-            expect(result.status).toBe('PENDING');
-            expect(mpesaRefund).toHaveBeenCalledWith({
-                transactionId: 'ws_CO_1234567890',
-                amount: 500,
-                phoneNumber: '254712345678',
-                remarks: 'Customer requested refund',
-                metadata: { refund_id: 'refund_456' },
-                idempotencyKey: 'refund_key_456'
-            });
+            expect(result.success).toBe(false);
+            expect(result.error.code).toBe('PAYSTACK_ERROR');
+            expect(result.error.message).toBe('Refund failed');
         });
     });
 });
