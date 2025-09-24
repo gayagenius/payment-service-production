@@ -8,22 +8,16 @@ import 'dotenv/config';
 import express from "express";
 import bodyParser from "body-parser";
 
-import payments from "../routes/payments.js";
-import refunds from "../routes/refunds.js";
-import methods from "../routes/methods.js";
-import paymentHistory from "../routes/paymentHistory.js";
-import queueHealthRouter from "../routes/queueHealth.js";
-import testRouter from "../routes/test.js";
-
-import payments from "../routes/payments-integrated.js";
+import payments from "../routes/payments-integrated.js"; 
 import refunds from "../routes/refunds.js";
 import methods from "../routes/methods.js";
 import paymentHistory from "../routes/paymentHistory.js";
 import webhooks from "../routes/webhooks.js";
-import queueHealthRouter from "../routes/queueHealth.js"
-import testRouter from "../routes/test.js"; 
+import queueHealthRouter from "../routes/queueHealth.js";
+import testRouter from "../routes/test.js";
 import { connect } from "../messaging/queueSetup.js";
 import('./../docs-server.js');
+
 
 import {
   paymentsSuccess,
@@ -116,13 +110,6 @@ app.get("/", (req, res) => {
   res.json({ status: "ok", message: "Payment service is running 🚀" });
 });
 
-// Manual tracing test route
-app.get('/trace-test', (req, res) => {
-  const span = tracer.startSpan('manual-test-span');
-  span.addEvent("Trace test endpoint hit");
-  span.end();
-  res.json({ message: 'Span created!' });
-});
 
 // --------------------
 // Prometheus metrics endpoint
