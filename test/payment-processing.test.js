@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { processPayment, createPaymentMethodForGateway, processRefundForGateway } from '../services/paymentProcessor.js';
-import { initializePayment, verifyPayment, processRefund } from '../gateways/paystack.js';
+import { initializePayment, processRefund } from '../gateways/paystack.js';
 
 // Mock the gateway functions
 vi.mock('../gateways/paystack.js', () => ({
