@@ -18,7 +18,6 @@ import testRouter from "../routes/test.js";
 import { connect } from "../messaging/queueSetup.js";
 import('./../docs-server.js');
 
-
 import {
   paymentsSuccess,
   paymentsFailed,
@@ -43,27 +42,27 @@ app.use(bodyParser.json());
 app.use(metricsMiddleware);
 
 // --------------------
-// Business Metrics
+// Business Metrics for payments/refunds
 // --------------------
 app.use((req, res, next) => {
   res.on('finish', () => {
-    // Payments success/failure metrics
-    if (req.path.startsWith('/payments')) {
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        recordPaymentSuccess(req.method, req.path);
-      } else if (res.statusCode >= 400) {
-        recordPaymentFailure(req.method, req.path);
-      }
+    const method = req.method;
+    const route = req.path;
+
+    // Payments
+    if (route.startsWith('/payments')) {
+      if (res.statusCode >= 200 && res.statusCode < 300) recordPaymentSuccess(method, route);
+      else if (res.statusCode >= 400) recordPaymentFailure(method, route);
     }
 
-    // Refunds metrics
-    if (req.path.startsWith('/refunds') && res.statusCode >= 200 && res.statusCode < 300) {
-      recordRefund(req.method, req.path);
+    // Refunds
+    if (route.startsWith('/refunds') && res.statusCode >= 200 && res.statusCode < 300) {
+      recordRefund(method, route);
     }
 
-    // Payment amount metric if available
+    // Payment amount (optional)
     if (req.paymentAmount) {
-      recordPaymentAmount(req.paymentAmount, req.method, req.path);
+      recordPaymentAmount(req.paymentAmount, method, route);
     }
   });
   next();
@@ -75,21 +74,25 @@ app.use((req, res, next) => {
 app.use("/payments", payments);
 app.use("/refunds", refunds);
 app.use("/methods", methods);
-app.use("/payments/methods", methods); // Add payment methods route under payments
-app.use("/payment", methods); // Add payment types route
+app.use("/payments/methods", methods);
+app.use("/payment", methods);
 app.use("/payment-history", paymentHistory);
 app.use("/webhooks", webhooks);
 app.use("/queue", queueHealthRouter);
 app.use("/test", testRouter);
 
-// Serve Swagger UI on main port
+// --------------------
+// Swagger / API docs
+// --------------------
 app.use('/docs', express.static('docs'));
 app.use('/api', express.static('api'));
 
-// Return URL endpoint for Stripe redirects
+// --------------------
+// Stripe return endpoint
+// --------------------
 app.get('/payments/return', (req, res) => {
   const { payment_intent, payment_intent_client_secret } = req.query;
-  
+
   if (payment_intent) {
     res.json({
       success: true,
@@ -105,11 +108,12 @@ app.get('/payments/return', (req, res) => {
   }
 });
 
-// Health check route
+// --------------------
+// Health check
+// --------------------
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "Payment service is running 🚀" });
 });
-
 
 // --------------------
 // Prometheus metrics endpoint
@@ -124,9 +128,7 @@ app.get("/metrics", async (req, res) => {
 // --------------------
 app.use((err, req, res, next) => {
   console.error("❌ Unhandled error:", err.stack || err);
-  if (res.headersSent) {
-    return next(err);
-  }
+  if (res.headersSent) return next(err);
   res.status(500).json({
     success: false,
     error: {
@@ -141,14 +143,13 @@ app.use((err, req, res, next) => {
 // Start server
 // --------------------
 const startServer = () => {
-  // Connect to RabbitMQ in background
   connect()
     .then(() => console.log("✅ RabbitMQ connected"))
     .catch(() => console.warn("⚠️ RabbitMQ offline - messaging disabled"));
 
-  // Start Express server
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Payment service running on http://0.0.0.0:${PORT}`);
+    console.log(`📊 Metrics available at http://0.0.0.0:${PORT}/metrics`);
   });
 };
 

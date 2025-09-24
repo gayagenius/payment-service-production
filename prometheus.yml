@@ -15,10 +15,10 @@ scrape_configs:
     static_configs:
       - targets: ['prometheus:9090']
 
-  # Payment Service container (assuming /metrics endpoint)
+  # Payment Service container (now on 8080)
   - job_name: 'payment-service'
     static_configs:
-      - targets: ['payment-service:9464']  # Node exporter / app metrics port
+      - targets: ['payment-service:8080']
 
   # Redis exporter
   - job_name: 'redis'
