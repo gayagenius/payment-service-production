@@ -52,7 +52,10 @@
     "logs": "tail -f payment-service.log",
     "clean": "rm -rf node_modules package-lock.json && npm install",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "dlq:stats": "node scripts/redrive-dlq.js stats",
+    "dlq:peek": "node scripts/redrive-dlq.js peek",
+    "dlq:redrive": "node scripts/redrive-dlq.js redrive"
   },
   "repository": {
     "type": "git",
@@ -66,17 +69,25 @@
   },
   "homepage": "https://github.com/gayagenius/payment-service-production#readme",
   "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^2.1.1",
     "amqplib": "^0.10.9",
     "axios": "^1.6.0",
     "body-parser": "^2.2.0",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "helmet": "^8.1.0",
+    "ioredis": "^5.8.0",
     "node-fetch": "^3.3.2",
     "opossum": "^5.0.1",
     "p-retry": "^7.0.0",
+    "pg": "^8.11.3",
+    "rate-limit-redis": "^4.2.2",
     "stripe": "^14.0.0",
-    "uuid": "^13.0.0",
-    "pg": "^8.11.3"
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "eslint": "^9.0.0",

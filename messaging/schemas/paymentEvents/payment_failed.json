@@ -1,0 +1,29 @@
+{
+  "$id": "payment_failed",
+  "type": "object",
+  "required": ["eventType", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "payment_failed" },
+    "payload": {
+      "type": "object",
+      "required": ["event", "data"],
+      "properties": {
+        "event": { "const": "charge.failed" },
+        "data": {
+          "type": "object",
+          "required": ["reference", "id", "amount", "status"],
+          "properties": {
+            "reference": { "type": "string" },
+            "id": { "type": ["string", "number"] },
+            "amount": { "type": "number" },
+            "status": { "type": "string" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "metadata": { "type": "object" }
+  },
+  "additionalProperties": false
+}

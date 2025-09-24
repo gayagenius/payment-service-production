@@ -1,0 +1,35 @@
+{
+  "$id": "payment_succeeded",
+  "type": "object",
+  "required": ["eventType", "payload", "metadata"],
+  "properties": {
+    "eventType": { "const": "payment_succeeded" },
+    "payload": {
+      "type": "object",
+      "required": ["event", "data"],
+      "properties": {
+        "event": { "const": "charge.success" },
+        "data": {
+          "type": "object",
+          "required": ["reference", "id", "amount", "status"],
+          "properties": {
+            "reference": { "type": "string" },
+            "id": { "type": ["string", "number"] },
+            "amount": { "type": "number" },
+            "currency": { "type": "string" },
+            "status": { "type": "string" },
+            "metadata": { "type": "object" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["correlationId", "idempotencyKey", "receivedAt"],
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

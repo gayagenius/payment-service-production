@@ -1,0 +1,29 @@
+{
+  "$id": "refund_processed",
+  "type": "object",
+  "required": ["eventType", "payload"],
+  "properties": {
+    "eventType": { "const": "refund_processed" },
+    "payload": {
+      "type": "object",
+      "required": ["event", "data"],
+      "properties": {
+        "event": { "const": "refund.processed" },
+        "data": {
+          "type": "object",
+          "required": ["transaction_reference", "refund_reference", "amount"],
+          "properties": {
+            "transaction_reference": { "type": "string" },
+            "refund_reference": { "type": "string" },
+            "amount": { "type": ["number", "string"] },
+            "currency": { "type": "string" },
+            "status": { "type": "string" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}
