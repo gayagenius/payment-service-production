@@ -2,31 +2,36 @@
  * Complete Paystack status to internal status mapping
  * Based on https://paystack.com/docs/api/#webhooks
  */
+/**
+ * Complete Paystack status to internal status mapping
+ * Based on https://paystack.com/docs/api/#webhooks
+ */
 export const mapPaystackStatus = (paystackStatus) => {
     const statusMap = {
         // Charge events
-        'pending': 'PENDING',
         'success': 'SUCCEEDED',
-        'failed': 'FAILED',
         'authorized': 'AUTHORIZED',
-        'reversed': 'CANCELLED', // Map reversed to cancelled
+        'reversed': 'CANCELLED', 
         'refunded': 'REFUNDED',
-        
+
         // Transfer events
         'otp': 'PENDING',
         'pending_otp': 'PENDING',
         'processing': 'PENDING',
         'sent': 'SUCCEEDED',
         'declined': 'FAILED',
-        
+
         // Refund events
         'processed': 'SUCCEEDED',
+
+        // Shared statuses
         'pending': 'PENDING',
         'failed': 'FAILED'
     };
 
     return statusMap[paystackStatus.toLowerCase()] || 'PENDING';
 };
+
 
 /**
  * Map Paystack event to internal event type
