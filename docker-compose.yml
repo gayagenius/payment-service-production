@@ -1,4 +1,3 @@
-
 version: "3.9"
 
 services:
@@ -14,17 +13,6 @@ services:
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql  # auto-load schema on first boot
     ports:
       - "5432:5432"
-
-    networks:
-      observability-net: {}
-
-  postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:latest
-    container_name: postgres-exporter
-    environment:
-      DATA_SOURCE_NAME: "postgresql://postgres:postgres@db:5432/payment_service?sslmode=disable"
-    ports:
-      - "9187:9187"
     networks:
       observability-net: {}
 
@@ -42,12 +30,12 @@ services:
     image: grafana/promtail:latest
     container_name: promtail
     volumes:
-     - /var/log:/var/log
-     - /var/lib/docker/containers:/var/lib/docker/containers:ro
-     - ./promtail-config.yaml:/etc/promtail/config.yaml:ro
+      - /var/log:/var/log
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./promtail-config.yaml:/etc/promtail/config.yaml:ro
     command: -config.file=/etc/promtail/config.yaml
-  depends_on:
-  - loki
+    depends_on:
+      - loki
 
   grafana:
     image: grafana/grafana:latest
@@ -55,7 +43,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-    - grafana_data:/var/lib/grafana
+      - grafana_data:/var/lib/grafana
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -78,6 +66,18 @@ services:
       RABBITMQ_URL: "http://rabbitmq:15672"
     ports:
       - "9419:9419"
+    networks:
+      observability-net: {}
+  
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:postgres@db:5432/payment_service?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      - db
     networks:
       observability-net: {}
 
@@ -110,7 +110,6 @@ services:
     ports:
       - "8080:8080"
       - "9464:9464"
-
     environment:
       NODE_ENV: development
       DB_HOST: db
@@ -126,7 +125,9 @@ services:
       - .:/app
     command: npm run dev
     networks:
-      observability-net: {}
+      observability-net:
+        aliases:
+          - payment-service   # 👈 ensures DNS resolves inside the network
 
   prometheus:
     image: prom/prometheus
@@ -138,8 +139,6 @@ services:
     networks:
       observability-net: {}
 
-
-
 volumes:
   payment_service_db:
   rabbitmq_data:
@@ -149,7 +148,3 @@ volumes:
 networks:
   observability-net:
     external: true
-
-
-
-
