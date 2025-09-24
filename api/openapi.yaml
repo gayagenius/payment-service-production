@@ -3,7 +3,7 @@ info:
   title: Payment Service API
   description: |
     A payment gateway service that handles payments, refunds, and payment methods.
-    This service provides a simulation mode for testing payment flows without real payment processors.
+    This service integrates with Paystack for real payment processing in test/live mode.
     
     ## Authentication
     All endpoints require Bearer JWT authentication.
@@ -15,13 +15,27 @@ info:
     - 100 requests per minute per user
     - 60 requests per minute per IP address
     
+    ## Paystack Testing
+    Use these test details for testing Paystack payments:
+    
+    ### Test Cards
+    - **Visa:** 4084084084084085
+    - **Visa (debit):** 4084084084084085
+    - **Mastercard:** 5399838383838381
+    - **American Express:** 371449635398431
+    
+    ### Test Bank Account
+    - **Account Number:** 0690000032
+    - **Bank Code:** 044
+    
+    
   version: 1.0.0
   contact:
     name: Payment Service Team
     email: payments@group1.com
 
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:8888
     description: Local development server
 
 security:
@@ -32,9 +46,10 @@ paths:
     post:
       summary: Create a new payment
       description: |
-        Process a new payment transaction. The payment will be simulated and may succeed or fail randomly.
+        Process a new payment transaction using Paystack integration. The payment will be processed through Paystack's API.
         Supports idempotency via the `Idempotency-Key` header and retry functionality via the `retry` boolean field.
         When `retry: true`, the system will use the idempotency key to safely retry an existing payment.
+        Currency is automatically set to KES (Kenyan Shilling) for all payments.
       operationId: createPayment
       tags:
         - Payments
@@ -61,17 +76,17 @@ paths:
             schema:
               $ref: '#/components/schemas/PaymentCreateRequest'
             examples:
-              card_payment:
-                summary: Card payment example
+              paystack_card_success:
+                summary: Paystack Card Payment (Success)
                 value:
+                  userId: "550e8400-e29b-41d4-a716-446655440000"
+                  orderId: "order_paystack_001"
                   amount: 2500
-                  currency: "KES"
-                  paymentMethodId: "550e8400-e29b-41d4-a716-446655440000"
                   retry: false
                   metadata:
                     order:
-                      id: "order_123"
-                      description: "Purchase of premium subscription"
+                      id: "order_paystack_001"
+                      description: "Premium subscription purchase"
                       items: ["Premium Plan", "Extra Storage"]
                       totalItems: 2
                       shippingAddress: "Nairobi, Kenya"
@@ -80,11 +95,50 @@ paths:
                       email: "user@example.com"
                       name: "John Doe"
                       phone: "+254712345678"
+                    gateway: "paystack"
+                    testMode: true
+              paystack_bank_transfer:
+                summary: Paystack Bank Transfer
+                value:
+                  userId: "550e8400-e29b-41d4-a716-446655440001"
+                  orderId: "order_paystack_002"
+                  amount: 5000
+                  retry: false
+                  metadata:
+                    order:
+                      id: "order_paystack_002"
+                      description: "Bank transfer payment"
+                    user:
+                      id: "550e8400-e29b-41d4-a716-446655440001"
+                      email: "bank@example.com"
+                      name: "Bank User"
+                    gateway: "paystack"
+                    testMode: true
+              paystack_ussd_payment:
+                summary: Paystack USSD Payment
+                value:
+                  userId: "550e8400-e29b-41d4-a716-446655440002"
+                  orderId: "order_paystack_003"
+                  amount: 1000
+                  retry: false
+                  metadata:
+                    order:
+                      id: "order_paystack_003"
+                      description: "USSD payment"
+                      items: ["Digital Product"]
+                      totalItems: 1
+                      shippingAddress: "Digital Delivery"
+                    user:
+                      id: "550e8400-e29b-41d4-a716-446655440002"
+                      email: "ussd@example.com"
+                      name: "USSD User"
+                      phone: "254728287616"
+                    gateway: "paystack"
+                    testMode: true
               one_time_payment:
                 summary: One-time payment method
                 value:
                   amount: 1000
-                  currency: "EUR"
                   paymentMethod:
                     type: "CARD"
                     token: "tok_1234567890abcdef"
@@ -107,8 +161,6 @@ paths:
                 summary: Retry payment example
                 value:
                   amount: 2500
-                  currency: "KES"
-                  paymentMethodId: "550e8400-e29b-41d4-a716-446655440000"
                   retry: true
                   idempotencyKey: "payment-user123-order456-1234567890"
                   metadata:
@@ -144,9 +196,7 @@ paths:
                       userId: "550e8400-e29b-41d4-a716-446655440000"
                       orderId: "order_123"
                       amount: 2500
-                      currency: "KES"
                       status: "SUCCEEDED"
-                      paymentMethodId: "550e8400-e29b-41d4-a716-446655440000"
                       gatewayResponse:
                         transactionId: "txn_1234567890"
                         processorResponse: "approved"
@@ -388,9 +438,7 @@ paths:
                         userId: "550e8400-e29b-41d4-a716-446655440000"
                         orderId: "order_123"
                         amount: 2500
-                        currency: "KES"
                         status: "SUCCEEDED"
-                        paymentMethodId: "550e8400-e29b-41d4-a716-446655440000"
                         createdAt: "2024-01-15T10:30:00Z"
                         updatedAt: "2024-01-15T10:30:00Z"
                     nextCursor: "eyJjcmVhdGVkQXQiOiIyMDI0LTAxLTE0VDEwOjMwOjAwWiIsImlkIjoiNTUwZTg0MDAtZTI5Yi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIn0="
@@ -404,7 +452,7 @@ paths:
     get:
       summary: Get available payment method types
       description: |
-        Retrieve all available payment method types that can be used for payments.
+        Retrieve all available payment method types supported by Paystack.
         This endpoint returns the master catalog of supported payment methods with their
         configuration details including required fields and validation rules.
       operationId: getPaymentMethodTypes
@@ -481,24 +529,24 @@ paths:
                         createdAt: "2024-01-01T00:00:00Z"
                         updatedAt: "2024-01-01T00:00:00Z"
                       - id: "550e8400-e29b-41d4-a716-446655440011"
-                        code: "WALLET"
-                        name: "Digital Wallet"
-                        description: "Digital wallets like Apple Pay, Google Pay, PayPal"
-                        isActive: true
-                        requiresBrand: false
-                        requiresLast4: false
-                        iconUrl: "/icons/wallet.svg"
-                        sortOrder: 2
-                        createdAt: "2024-01-01T00:00:00Z"
-                        updatedAt: "2024-01-01T00:00:00Z"
-                      - id: "550e8400-e29b-41d4-a716-446655440012"
                         code: "BANK_TRANSFER"
                         name: "Bank Transfer"
-                        description: "Direct bank transfers and ACH payments"
+                        description: "Direct bank transfers"
                         isActive: true
                         requiresBrand: false
                         requiresLast4: false
                         iconUrl: "/icons/bank.svg"
+                        sortOrder: 2
+                        createdAt: "2024-01-01T00:00:00Z"
+                        updatedAt: "2024-01-01T00:00:00Z"
+                      - id: "550e8400-e29b-41d4-a716-446655440012"
+                        code: "USSD"
+                        name: "USSD"
+                        description: "USSD payments"
+                        isActive: true
+                        requiresBrand: false
+                        requiresLast4: false
+                        iconUrl: "/icons/ussd.svg"
                         sortOrder: 3
                         createdAt: "2024-01-01T00:00:00Z"
                         updatedAt: "2024-01-01T00:00:00Z"
@@ -512,13 +560,13 @@ paths:
                   value:
                     data:
                       - id: "550e8400-e29b-41d4-a716-446655440013"
-                        code: "CRYPTO"
-                        name: "Cryptocurrency"
-                        description: "Bitcoin, Ethereum and other cryptocurrencies"
-                        isActive: false
+                        code: "QR"
+                        name: "QR Code"
+                        description: "QR code payments"
+                        isActive: true
                         requiresBrand: false
                         requiresLast4: false
-                        iconUrl: "/icons/crypto.svg"
+                        iconUrl: "/icons/qr.svg"
                         sortOrder: 4
                         createdAt: "2024-01-01T00:00:00Z"
                         updatedAt: "2024-01-01T00:00:00Z"
@@ -640,7 +688,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /payment-history/{paymentId}:
+  /payment-history/{payment_id}:
     get:
       summary: Get payment history for a specific payment
       description: |
@@ -653,7 +701,7 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - name: paymentId
+        - name: payment_id
           in: path
           description: Payment ID
           required: true
@@ -789,8 +837,6 @@ paths:
                                   type: string
                                 amount:
                                   type: integer
-                                currency:
-                                  type: string
                       pagination:
                         type: object
                         properties:
@@ -927,34 +973,99 @@ components:
       type: object
       required:
         - amount
-        - currency
       properties:
         amount:
           type: integer
           description: Amount in minor units (e.g., cents for KES)
           minimum: 1
           example: 2500
-        currency:
-          type: string
-          description: ISO 4217 currency code
-          pattern: '^[A-Z]{3}$'
-          example: "KES"
-        paymentMethodId:
+        userId:
           type: string
           format: uuid
-          description: ID of existing payment method
+          description: ID of the user initiating the payment
           example: "550e8400-e29b-41d4-a716-446655440000"
-        paymentMethod:
-          $ref: '#/components/schemas/PaymentMethodDetails'
         orderId:
           type: string
           description: Associated order ID
           example: "order_123"
         metadata:
           type: object
-          description: Additional metadata
+          description: Additional metadata including order and user information
+          properties:
+            order:
+              type: object
+              description: Order information (optional but recommended)
+              properties:
+                id:
+                  type: string
+                  description: Order ID (must match main orderId if provided)
+                  example: "order_123"
+                description:
+                  type: string
+                  description: Order description
+                  example: "Purchase of premium subscription"
+                items:
+                  type: array
+                  items:
+                    type: string
+                  description: List of items in the order
+                  example: ["Premium Plan", "Extra Storage"]
+                totalItems:
+                  type: integer
+                  description: Total number of items
+                  example: 2
+                shippingAddress:
+                  type: string
+                  description: Shipping address
+                  example: "Nairobi, Kenya"
+            user:
+              type: object
+              description: User information (optional but recommended)
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                  description: User ID (must match main userId if provided)
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                email:
+                  type: string
+                  format: email
+                  description: User email address
+                  example: "user@example.com"
+                name:
+                  type: string
+                  description: User full name
+                  example: "John Doe"
+                phone:
+                  type: string
+                  description: User phone number
+                  example: "+254712345678"
+            phoneNumber:
+              type: string
+              description: Phone number for USSD payments (required for USSD payment method)
+              example: "+254712345678"
+            description:
+              type: string
+              description: Payment description
+              example: "Premium subscription purchase"
+            source:
+              type: string
+              description: Payment source
+              example: "web"
           additionalProperties: true
           example:
+            order:
+              id: "order_123"
+              description: "Purchase of premium subscription"
+              items: ["Premium Plan", "Extra Storage"]
+              totalItems: 2
+              shippingAddress: "Nairobi, Kenya"
+            user:
+              id: "550e8400-e29b-41d4-a716-446655440000"
+              email: "user@example.com"
+              name: "John Doe"
+              phone: "+254712345678"
+            phoneNumber: "+254712345678"
             description: "Premium subscription purchase"
             source: "web"
         retry:
@@ -963,29 +1074,6 @@ components:
           default: false
           example: false
 
-    PaymentMethodDetails:
-      type: object
-      required:
-        - type
-        - token
-      properties:
-        type:
-          type: string
-          enum: [CARD, WALLET, BANK_TRANSFER]
-          description: Payment method type
-        token:
-          type: string
-          description: Tokenized payment method reference (never raw PAN)
-          example: "tok_1234567890abcdef"
-        brand:
-          type: string
-          description: Card brand (for CARD type)
-          example: "VISA"
-        last4:
-          type: string
-          description: Last 4 digits of card number
-          pattern: '^[0-9]{4}$'
-          example: "4242"
 
     Payment:
       type: object
@@ -1007,23 +1095,13 @@ components:
           example: "order_123"
         amount:
           type: integer
-          description: Amount in minor units
+          description: Amount in minor units (KES)
           example: 2500
-        currency:
-          type: string
-          description: ISO 4217 currency code
-          example: "KES"
         status:
           type: string
           enum: [PENDING, AUTHORIZED, SUCCEEDED, FAILED, REFUNDED, PARTIALLY_REFUNDED, CANCELLED]
           description: Payment status
           example: "SUCCEEDED"
-        paymentMethodId:
-          type: string
-          format: uuid
-          nullable: true
-          description: Payment method used
-          example: "550e8400-e29b-41d4-a716-446655440000"
         gatewayResponse:
           type: object
           description: Gateway response data (masked, no PAN)
@@ -1075,19 +1153,15 @@ components:
           format: uuid
           description: Unique refund identifier
           example: "550e8400-e29b-41d4-a716-446655440002"
-        paymentId:
+        payment_id:
           type: string
           format: uuid
           description: Original payment ID
           example: "550e8400-e29b-41d4-a716-446655440001"
         amount:
           type: integer
-          description: Refund amount in minor units
+          description: Refund amount in minor units (KES)
           example: 2500
-        currency:
-          type: string
-          description: ISO 4217 currency code
-          example: "KES"
         status:
           type: string
           enum: [PENDING, SUCCEEDED, FAILED]
@@ -1128,7 +1202,7 @@ components:
           example: "550e8400-e29b-41d4-a716-446655440000"
         type:
           type: string
-          enum: [CARD, WALLET, BANK_TRANSFER]
+          enum: [CARD, BANK_TRANSFER, USSD, QR]
           description: Payment method type
           example: "CARD"
         details:
@@ -1160,7 +1234,7 @@ components:
           example: "550e8400-e29b-41d4-a716-446655440000"
         type:
           type: string
-          enum: [CARD, WALLET, BANK_TRANSFER]
+          enum: [CARD, BANK_TRANSFER, USSD, QR]
           description: Payment method type
           example: "CARD"
         brand:
@@ -1319,7 +1393,6 @@ components:
             code:
               type: string
               description: Machine-readable error code
-              example: "INVALID_CURRENCY"
             message:
               type: string
               description: Human-readable error message
@@ -1412,8 +1485,6 @@ components:
               user_id: "550e8400-e29b-41d4-a716-446655440000"
               order_id: "order_123"
               amount: 2500
-              currency: "KES"
-              payment_method_id: "550e8400-e29b-41d4-a716-446655440000"
               idempotency_key: "idem_1234567890"
             order_details:
               id: "order_123"
@@ -1445,11 +1516,11 @@ components:
               value:
                 error:
                   code: "MISSING_REQUIRED_FIELDS"
-                  message: "Missing required fields: amount, currency"
+                  message: "Missing required fields: amount"
                   status: 400
                   correlation_id: "abc-123-xyz"
                   details:
-                    missingFields: ["amount", "currency"]
+                    missingFields: ["amount"]
                     providedFields: ["orderId"]
             invalid_json:
               summary: Invalid JSON format
@@ -1541,49 +1612,48 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
           examples:
-            invalid_currency:
-              summary: Invalid currency code
+            amount_invalid:
+              summary: Invalid amount
               value:
                 error:
-                  code: "INVALID_CURRENCY"
-                  message: "Invalid currency code"
+                  code: "INVALID_AMOUNT"
+                  message: "Invalid amount"
                   status: 400
                   correlation_id: "abc-123-xyz"
                 details:
-                  field: "currency"
-                  value: "INVALID"
-                  constraint: "Must be a valid ISO 4217 currency code (3 uppercase letters)"
-                  validExamples: ["KES", "USD", "EUR"]
-            invalid_amount:
+                  field: "amount"
+                  value: -100
+                  constraint: "Must be a positive integer representing amount in minor units"
+                  minimum: 1
+            invalid_amount_2:
               summary: Invalid amount
               value:
                 status: "VALIDATION_ERROR"
                 message: "Invalid amount"
                 details:
                   field: "amount"
-                  value: -100
+                  value: 0
                   constraint: "Must be a positive integer representing amount in minor units"
                   minimum: 1
-            invalid_uuid:
+            invalid_uuid_format:
               summary: Invalid UUID format
               value:
                 status: "VALIDATION_ERROR"
                 message: "Invalid UUID format"
                 details:
-                  field: "paymentMethodId"
+                  field: "payment_method_id"
                   value: "invalid-uuid"
                   constraint: "Must be a valid UUID v4 format"
-            refund_amount_exceeds:
+            refund_amount_exceeds_payment_amount:
               summary: Refund amount exceeds payment amount
               value:
                 status: "VALIDATION_ERROR"
                 message: "Refund amount exceeds available payment amount"
                 details:
-                  field: "amount"
+                  field: "refund_amount"
                   value: 5000
                   constraint: "Must not exceed original payment amount"
-                  originalAmount: 2500
-                  currency: "KES"
+                  original_amount: 2500
 
     Conflict:
       description: Conflict - Resource already exists or operation not allowed
@@ -1592,7 +1662,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
           examples:
-            idempotency_conflict:
+            idempotency_key_already_used:
               summary: Idempotency key already used
               value:
                 error:
@@ -1601,16 +1671,16 @@ components:
                   status: 409
                   correlation_id: "abc-123-xyz"
                 details:
-                  idempotencyKey: "idem_1234567890"
-                  existingResourceId: "550e8400-e29b-41d4-a716-446655440001"
-                  resourceType: "payment"
+                  idempotency_key: "idem_1234567890"
+                  existing_resource_id: "550e8400-e29b-41d4-a716-446655440001"
+                  resource_type: "payment"
             payment_already_refunded:
               summary: Payment already refunded
               value:
                 status: "CONFLICT"
                 message: "Payment has already been refunded"
                 details:
-                  paymentId: "550e8400-e29b-41d4-a716-446655440001"
+                  payment_id: "550e8400-e29b-41d4-a716-446655440001"
                   currentStatus: "REFUNDED"
                   refundId: "550e8400-e29b-41d4-a716-446655440002"
 
