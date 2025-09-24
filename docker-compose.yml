@@ -1,16 +1,30 @@
+version: '3.8'
+
 services:
   db:
     image: postgres:14-alpine
     container_name: payment-service-db
     environment:
-      POSTGRES_USER: your_db_user
-      POSTGRES_PASSWORD: your_db_password
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: payment_service
     volumes:
       - payment_service_db:/var/lib/postgresql/data
     ports:
       - "5432:5432"
-  
+    networks:
+      observability-net: {}
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:postgres@db:5432/payment_service?sslmode=disable"
+    ports:
+      - "9187:9187"
+    networks:
+      observability-net: {}
+
   rabbitmq:
     image: rabbitmq:3-management
     container_name: payment-service-rabbitmq
@@ -22,6 +36,18 @@ services:
       RABBITMQ_DEFAULT_PASS: guest
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      observability-net: {}
+
+  rabbitmq-exporter:
+    image: kbudde/rabbitmq-exporter:latest
+    container_name: rabbitmq-exporter
+    environment:
+      RABBITMQ_URL: "http://rabbitmq:15672"
+    ports:
+      - "9419:9419"
+    networks:
+      observability-net: {}
 
   redis:
     image: redis:7-alpine
@@ -29,21 +55,35 @@ services:
     ports:
       - "6379:6379"
     command: redis-server --appendonly yes
-  
+    networks:
+      observability-net: {}
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis-exporter
+    environment:
+      REDIS_ADDR: "redis:6379"
+    ports:
+      - "9121:9121"
+    networks:
+      observability-net: {}
+
   app:
     build: .
     container_name: payment-service
     depends_on:
       - db
       - rabbitmq
+      - redis
     ports:
       - "8080:8080"
+      - "9464:9464"
     environment:
       NODE_ENV: development
       DB_HOST: db
       DB_PORT: 5432
-      DB_USER: your_db_user
-      DB_PASSWORD: your_db_password
+      DB_USER: postgres
+      DB_PASSWORD: postgres
       DB_NAME: payment_service
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: guest
@@ -52,7 +92,35 @@ services:
     volumes:
       - .:/app
     command: npm run dev
+    networks:
+      observability-net: {}
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      observability-net: {}
+
+  promtail:
+  image: grafana/promtail:latest
+  container_name: promtail
+  volumes:
+    - /var/log:/var/log:ro                     # host logs
+    - /var/lib/docker/containers:/var/lib/docker/containers:ro  # docker logs
+    - ./promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+  networks:
+    observability-net: {}
+  restart: unless-stopped
+
 
 volumes:
   payment_service_db:
   rabbitmq_data:
+
+networks:
+  observability-net:
+    external: true
