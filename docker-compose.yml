@@ -138,16 +138,6 @@ services:
     networks:
       observability-net: {}
 
-  promtail:
-  image: grafana/promtail:latest
-  container_name: promtail
-  volumes:
-    - /var/log:/var/log:ro                     # host logs
-    - /var/lib/docker/containers:/var/lib/docker/containers:ro  # docker logs
-    - ./promtail-config.yml:/etc/promtail/promtail-config.yml:ro
-  networks:
-    observability-net: {}
-  restart: unless-stopped
 
 
 volumes:
