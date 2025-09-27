@@ -8,7 +8,7 @@ import {
     verifyPayment, 
     getLatestPaymentStatus,
     processRefund as paystackRefund, 
-    verifyWebhook as paystackVerifyWebhook, 
+    verifyWebhook as paystackVerifyWebhook,
     handleWebhook as paystackHandleWebhook,
     getSupportedPaymentMethods,
     getSupportedCurrencies
