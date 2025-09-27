@@ -379,12 +379,12 @@ If data is accidentally archived or deleted:
 -- Restore from archive
 INSERT INTO payments_partitioned (
     id, user_id, order_id, amount, currency, status,
-    payment_method_id, gateway_response, idempotency_key,
+    metadata, gateway_response, idempotency_key,
     created_at, updated_at
 )
 SELECT 
     id, user_id, order_id, amount, currency, status,
-    payment_method_id, gateway_response, idempotency_key,
+    metadata, gateway_response, idempotency_key,
     created_at, updated_at
 FROM payments_archive
 WHERE id = 'payment-id-to-restore';
@@ -405,12 +405,12 @@ WHERE config_key = 'archival_enabled';
 -- Restore all archived data
 INSERT INTO payments_partitioned (
     id, user_id, order_id, amount, currency, status,
-    payment_method_id, gateway_response, idempotency_key,
+    metadata, gateway_response, idempotency_key,
     created_at, updated_at
 )
 SELECT 
     id, user_id, order_id, amount, currency, status,
-    payment_method_id, gateway_response, idempotency_key,
+    metadata, gateway_response, idempotency_key,
     created_at, updated_at
 FROM payments_archive;
 

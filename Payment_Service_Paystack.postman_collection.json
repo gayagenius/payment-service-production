@@ -46,7 +46,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"orderId\": \"order_card_{{$randomInt}}\",\n  \"amount\": 2500,\n  \"metadata\": {\n    \"user\": {\n      \"id\": \"{{user_id}}\",\n      \"email\": \"test@example.com\",\n      \"name\": \"Test User\"\n    },\n    \"order\": {\n      \"id\": \"order_card_{{$randomInt}}\",\n      \"description\": \"Card payment with Paystack\",\n      \"items\": [\"Premium Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"Premium subscription purchase\",\n    \"source\": \"web\"\n  },\n  \"retry\": false\n}"
+					"raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"orderId\": \"order_card_001\",\n  \"amount\": 2500,\n  \"metadata\": {\n    \"user\": {\n      \"id\": \"{{user_id}}\",\n      \"email\": \"test@example.com\",\n      \"name\": \"Test User\"\n    },\n    \"order\": {\n      \"id\": \"order_card_001\",\n      \"description\": \"Card payment with Paystack\",\n      \"items\": [\"Premium Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"Premium subscription purchase\",\n    \"source\": \"web\"\n  },\n  \"retry\": false\n}"
 				},
 				"url": {
 					"raw": "{{base_url}}/payments",
@@ -83,7 +83,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"orderId\": \"order_bank_{{$randomInt}}\",\n  \"amount\": 5000,\n  \"metadata\": {\n    \"user\": {\n      \"id\": \"{{user_id}}\",\n      \"email\": \"bank@example.com\",\n      \"name\": \"Bank User\"\n    },\n    \"order\": {\n      \"id\": \"order_bank_{{$randomInt}}\",\n      \"description\": \"Bank transfer payment\",\n      \"items\": [\"Bank Transfer Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"Bank transfer subscription\",\n    \"source\": \"web\"\n  },\n  \"retry\": false\n}"
+					"raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"orderId\": \"order_bank_002\",\n  \"amount\": 5000,\n  \"metadata\": {\n    \"user\": {\n      \"id\": \"{{user_id}}\",\n      \"email\": \"bank@example.com\",\n      \"name\": \"Bank User\"\n    },\n    \"order\": {\n      \"id\": \"order_bank_002\",\n      \"description\": \"Bank transfer payment\",\n      \"items\": [\"Bank Transfer Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"Bank transfer subscription\",\n    \"source\": \"web\"\n  },\n  \"retry\": false\n}"
 				},
 				"url": {
 					"raw": "{{base_url}}/payments",
@@ -120,7 +120,44 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"orderId\": \"order_ussd_{{$randomInt}}\",\n  \"amount\": 1000,\n  \"metadata\": {\n    \"user\": {\n      \"id\": \"{{user_id}}\",\n      \"email\": \"ussd@example.com\",\n      \"name\": \"USSD User\",\n      \"phone\": \"+254728287616\"\n    },\n    \"order\": {\n      \"id\": \"order_ussd_{{$randomInt}}\",\n      \"description\": \"USSD payment\",\n      \"items\": [\"USSD Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"USSD subscription\",\n    \"source\": \"web\"\n  },\n  \"retry\": false\n}"
+					"raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"orderId\": \"order_ussd_003\",\n  \"amount\": 1000,\n  \"metadata\": {\n    \"user\": {\n      \"id\": \"{{user_id}}\",\n      \"email\": \"ussd@example.com\",\n      \"name\": \"USSD User\",\n      \"phone\": \"+254728287616\"\n    },\n    \"order\": {\n      \"id\": \"order_ussd_003\",\n      \"description\": \"USSD payment\",\n      \"items\": [\"USSD Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"USSD subscription\",\n    \"source\": \"web\"\n  },\n  \"retry\": false\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/payments",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"payments"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Retry Payment",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{auth_token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Idempotency-Key",
+						"value": "retry-{{$randomUUID}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"orderId\": \"order_retry_004\",\n  \"amount\": 2500,\n  \"retry\": true,\n  \"idempotencyKey\": \"retry-{{$randomUUID}}\",\n  \"metadata\": {\n    \"user\": {\n      \"id\": \"{{user_id}}\",\n      \"email\": \"retry@example.com\",\n      \"name\": \"Retry User\"\n    },\n    \"order\": {\n      \"id\": \"order_retry_004\",\n      \"description\": \"Retry payment example\",\n      \"items\": [\"Retry Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"Retry payment for failed transaction\",\n    \"source\": \"web\"\n  }\n}"
 				},
 				"url": {
 					"raw": "{{base_url}}/payments",
@@ -249,7 +286,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n  \"payment_id\": \"{{payment_id}}\",\n  \"amount\": 1000,\n  \"reason\": \"Customer requested refund\",\n  \"metadata\": {\n    \"refund_reason\": \"Customer not satisfied\",\n    \"processed_by\": \"admin\",\n    \"notes\": \"Full refund processed\"\n  }\n}"
+					"raw": "{\n  \"payment_id\": \"{{payment_id}}\",\n  \"amount\": 1000,\n  \"currency\": \"KES\",\n  \"reason\": \"Customer requested refund\"\n}"
 				},
 				"url": {
 					"raw": "{{base_url}}/refunds",
@@ -264,7 +301,7 @@
 			"response": []
 		},
 		{
-			"name": "Get Refunds",
+			"name": "Get All Refunds",
 			"request": {
 				"method": "GET",
 				"header": [
@@ -411,67 +448,6 @@
 				}
 			},
 			"response": []
-		},
-		{
-			"name": "Paystack Webhook",
-			"request": {
-				"method": "POST",
-				"header": [
-					{
-						"key": "Content-Type",
-						"value": "application/json",
-						"type": "text"
-					},
-					{
-						"key": "x-paystack-signature",
-						"value": "{{paystack_signature}}",
-						"type": "text"
-					}
-				],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n  \"event\": \"charge.success\",\n  \"data\": {\n    \"id\": 1234567890,\n    \"domain\": \"test\",\n    \"status\": \"success\",\n    \"reference\": \"{{payment_id}}\",\n    \"amount\": 2500,\n    \"message\": null,\n    \"gateway_response\": \"Successful\",\n    \"paid_at\": \"2024-01-15T10:30:00.000Z\",\n    \"created_at\": \"2024-01-15T10:25:00.000Z\",\n    \"channel\": \"card\",\n    \"currency\": \"NGN\",\n    \"ip_address\": \"127.0.0.1\",\n    \"metadata\": {\n      \"user_id\": \"{{user_id}}\",\n      \"order_id\": \"order_123\"\n    },\n    \"log\": null,\n    \"fees\": 50,\n    \"fees_split\": null,\n    \"authorization\": {\n      \"authorization_code\": \"AUTH_1234567890\",\n      \"bin\": \"408408\",\n      \"last4\": \"4085\",\n      \"exp_month\": \"12\",\n      \"exp_year\": \"2025\",\n      \"channel\": \"card\",\n      \"card_type\": \"visa\",\n      \"bank\": \"TEST BANK\",\n      \"country_code\": \"NG\",\n      \"brand\": \"visa\",\n      \"reusable\": true,\n      \"signature\": \"SIG_1234567890\",\n      \"account_name\": null\n    },\n    \"customer\": {\n      \"id\": 123456,\n      \"first_name\": \"Test\",\n      \"last_name\": \"User\",\n      \"email\": \"test@example.com\",\n      \"customer_code\": \"CUS_1234567890\",\n      \"phone\": null,\n      \"metadata\": null,\n      \"risk_action\": \"default\",\n      \"international_format_phone\": null\n    },\n    \"plan\": null,\n    \"split\": {},\n    \"order_id\": null,\n    \"paidAt\": \"2024-01-15T10:30:00.000Z\",\n    \"createdAt\": \"2024-01-15T10:25:00.000Z\",\n    \"requested_amount\": 2500,\n    \"pos_transaction_data\": null,\n    \"source\": null,\n    \"fees_breakdown\": null\n  }\n}"
-				},
-				"url": {
-					"raw": "{{base_url}}/webhooks/paystack",
-					"host": [
-						"{{base_url}}"
-					],
-					"path": [
-						"webhooks",
-						"paystack"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "Payment Return URL",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{base_url}}/payments/return?reference={{payment_id}}&status=success",
-					"host": [
-						"{{base_url}}"
-					],
-					"path": [
-						"payments",
-						"return"
-					],
-					"query": [
-						{
-							"key": "reference",
-							"value": "{{payment_id}}"
-						},
-						{
-							"key": "status",
-							"value": "success"
-						}
-					]
-				}
-			},
-			"response": []
 		}
 	],
 	"event": [
@@ -516,13 +492,13 @@
 			"type": "string"
 		},
 		{
-			"key": "refund_id",
-			"value": "155db763-c345-44d8-bf93-df2b0337bc80",
+			"key": "paystack_signature",
+			"value": "your_paystack_webhook_signature",
 			"type": "string"
 		},
 		{
-			"key": "paystack_signature",
-			"value": "your_paystack_webhook_signature",
+			"key": "refund_id",
+			"value": "64256d57-643e-42e5-9001-2fc95942b6f3",
 			"type": "string"
 		}
 	]
