@@ -45,10 +45,8 @@ router.post('/', async (req, res) => {
 
         // Get payment details
         const paymentQuery = `
-            SELECT p.*, pmt.code as payment_method_type
+            SELECT p.*
             FROM payments p
-            LEFT JOIN user_payment_methods upm ON p.payment_method_id = upm.id
-            LEFT JOIN payment_method_types pmt ON upm.payment_method_type_id = pmt.id
             WHERE p.id = $1
         `;
 
@@ -366,9 +364,8 @@ router.get('/:id', async (req, res) => {
             });
         }
 
-        const query = `
-            SELECT * FROM refunds WHERE id = $1
-        `;
+        // Use archival lookup function to check both main and archived tables
+        const query = `SELECT * FROM get_refund_with_archive($1)`;
 
         const result = await dbPoolManager.executeRead(query, [id]);
         const refund = result.rows[0];

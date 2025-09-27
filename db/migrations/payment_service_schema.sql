@@ -27,39 +27,7 @@ CREATE TYPE refund_status AS ENUM (
 -- =============================================
 
 -- Payment Method Types (Master Catalog)
-CREATE TABLE payment_method_types (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    code VARCHAR(50) NOT NULL UNIQUE,
-    name VARCHAR(100) NOT NULL,
-    description TEXT NULL,
-    is_active BOOLEAN NOT NULL DEFAULT true,
-    requires_brand BOOLEAN NOT NULL DEFAULT false,
-    requires_last4 BOOLEAN NOT NULL DEFAULT false,
-    icon_url VARCHAR(255) NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- User Payment Methods (User's Saved Methods)
-CREATE TABLE user_payment_methods (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL,
-    payment_method_type_id UUID NOT NULL REFERENCES payment_method_types(id),
-    brand VARCHAR(50) NULL,
-    last4 VARCHAR(4) NULL,
-    details_encrypted TEXT NOT NULL,
-    is_default BOOLEAN NOT NULL DEFAULT false,
-    is_active BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    
-    CONSTRAINT chk_user_payment_methods_last4 CHECK (
-        last4 IS NULL OR (last4 ~ '^[0-9]{4}$')
-    ),
-    CONSTRAINT chk_user_payment_methods_brand CHECK (
-        brand IS NULL OR length(trim(brand)) > 0
-    )
-);
+-- Payment method tables removed - payment methods are now handled by the gateway directly
 
 
 -- Payments
@@ -70,7 +38,6 @@ CREATE TABLE payments (
     amount INTEGER NOT NULL,
     currency CHAR(3) NOT NULL,
     status payment_status NOT NULL DEFAULT 'PENDING',
-    payment_method_id UUID NULL REFERENCES user_payment_methods(id),
     gateway_response JSONB NOT NULL DEFAULT '{}',
     idempotency_key VARCHAR(255) NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -125,22 +92,14 @@ CREATE TABLE refunds (
 -- INDEXES
 -- =============================================
 
--- Payment Method Types
-CREATE INDEX idx_payment_method_types_code ON payment_method_types(code);
-CREATE INDEX idx_payment_method_types_active ON payment_method_types(is_active);
-
--- User Payment Methods
-CREATE INDEX idx_user_payment_methods_user_id ON user_payment_methods(user_id);
-CREATE INDEX idx_user_payment_methods_user_default ON user_payment_methods(user_id, is_default DESC, created_at DESC);
-CREATE INDEX idx_user_payment_methods_type_id ON user_payment_methods(payment_method_type_id);
-CREATE INDEX idx_user_payment_methods_active ON user_payment_methods(user_id, is_active, created_at DESC);
+-- Payment method indexes removed - payment methods are now handled by the gateway directly
 
 
 -- Payments
 CREATE INDEX idx_payments_user_id_created ON payments(user_id, created_at DESC);
 CREATE INDEX idx_payments_order_id ON payments(order_id) WHERE order_id IS NOT NULL;
 CREATE INDEX idx_payments_status_created ON payments(status, created_at DESC);
-CREATE INDEX idx_payments_payment_method_id ON payments(payment_method_id) WHERE payment_method_id IS NOT NULL;
+-- Payment method index removed
 
 -- Payment History
 CREATE INDEX idx_payment_history_payment_id_created ON payment_history(payment_id, created_at DESC);
@@ -178,13 +137,7 @@ END;
 $$ language 'plpgsql';
 
 -- Triggers for updated_at
-CREATE TRIGGER update_payment_method_types_updated_at 
-    BEFORE UPDATE ON payment_method_types 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_user_payment_methods_updated_at 
-    BEFORE UPDATE ON user_payment_methods 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Payment method triggers removed - payment methods are now handled by the gateway directly
 
 
 CREATE TRIGGER update_payments_updated_at 
@@ -234,13 +187,12 @@ CREATE TRIGGER update_refunds_updated_at
 -- COMMENTS
 -- =============================================
 
-COMMENT ON TABLE payment_method_types IS 'Master catalog of supported payment method types';
-COMMENT ON TABLE user_payment_methods IS 'Stores encrypted payment method information for users';
+-- Payment method table comments removed
 COMMENT ON TABLE payments IS 'Main payments table storing all payment transactions';
 COMMENT ON TABLE payment_history IS 'Audit trail for payment status changes and transaction history';
 COMMENT ON TABLE refunds IS 'Stores refund information for payments';
 
-COMMENT ON COLUMN user_payment_methods.details_encrypted IS 'KMS-managed encrypted payment method details (never store raw PAN)';
+-- Payment method column comments removed
 COMMENT ON COLUMN payments.amount IS 'Amount in minor units (e.g., cents for KES) to avoid floating point issues';
 COMMENT ON COLUMN payments.gateway_response IS 'Gateway response data (masked, no sensitive information)';
 COMMENT ON COLUMN payments.idempotency_key IS 'Unique key for idempotent payment requests';

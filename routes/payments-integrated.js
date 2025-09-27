@@ -1,9 +1,8 @@
 import express from 'express';
 import dbPoolManager from '../db/connectionPool.js';
 import { API_CONFIG, PAYMENT_CONFIG, SECURITY_CONFIG } from '../config/constants.js';
-import { processPayment, createPaymentMethodForGateway } from '../services/paymentProcessor.js';
+import { processPayment, createPaymentMethodForGateway, syncPaymentStatusWithPaystack } from '../services/paymentProcessor.js';
 import { publishPaymentEvent } from '../messaging/publishPaymentEvent.js';
-import methodsRouter from './methods.js';
 
 const router = express.Router();
 
@@ -28,7 +27,7 @@ router.get('/', async (req, res) => {
         // Build query
         let query = `
             SELECT p.id, p.user_id, p.order_id, p.amount, p.currency, p.status,
-                   p.payment_method_id, p.gateway_response, p.idempotency_key,
+                   p.gateway_response, p.idempotency_key, p.metadata,
                    p.created_at, p.updated_at
             FROM payments p
             WHERE 1=1
@@ -75,9 +74,9 @@ router.get('/', async (req, res) => {
                 amount: row.amount,
                 currency: row.currency,
                 status: row.status,
-                paymentMethodId: row.payment_method_id,
                 gatewayResponse: row.gateway_response,
                 idempotencyKey: row.idempotency_key,
+                metadata: row.metadata,
                 createdAt: row.created_at,
                 updatedAt: row.updated_at
             })),
@@ -116,57 +115,236 @@ router.post('/', async (req, res) => {
         } = req.body;
 
         // Validate required fields
-        if (!user_id || !order_id || !amount) {
+        if (!order_id || amount === undefined || amount === null) {
             return res.status(400).json({
                 success: false,
                 error: {
                     code: 'VALIDATION_ERROR',
                     message: 'Missing required fields',
-                    details: 'user_id, order_id, and amount are required'
+                    details: 'userId, orderId, and amount are required'
+                }
+            });
+        }
+        
+        // Validate amount is a number
+        if (typeof amount !== 'number') {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    code: 'VALIDATION_ERROR',
+                    message: 'Invalid amount type',
+                    details: 'Amount must be a number'
                 }
             });
         }
 
-        // Validate amount
-        if (amount <= PAYMENT_CONFIG.AMOUNT.MIN) {
-            return res.status(API_CONFIG.STATUS_CODES.BAD_REQUEST).json({
+        // Validate amount for test mode (1-5)
+        if (amount < 1 || amount > 5) {
+            return res.status(400).json({
                 success: false,
                 error: {
-                    code: API_CONFIG.ERROR_CODES.VALIDATION_ERROR,
-                    message: 'Invalid amount',
-                    details: `Amount must be greater than ${PAYMENT_CONFIG.AMOUNT.MIN}`
+                    code: 'INVALID_AMOUNT',
+                    message: 'Invalid amount for test mode',
+                    details: 'Amount must be between 1 and 5 for test mode'
                 }
             });
+        }
+
+        // Validate authorization header
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+            return res.status(401).json({
+                success: false,
+                error: {
+                    code: 'MISSING_AUTHORIZATION',
+                    message: 'Authorization header is required',
+                    details: 'Authorization header with Bearer token is required'
+                }
+            });
+        }
+
+        // Validate authorization header format (Bearer token)
+        if (!authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                success: false,
+                error: {
+                    code: 'INVALID_AUTHORIZATION_FORMAT',
+                    message: 'Invalid authorization format',
+                    details: 'Authorization header must start with "Bearer "'
+                }
+            });
+        }
+
+        // Extract token from header
+        const authToken = authHeader.substring(7); // Remove "Bearer " prefix
+        if (!authToken || authToken.trim().length === 0) {
+            return res.status(401).json({
+                success: false,
+                error: {
+                    code: 'INVALID_AUTH_TOKEN',
+                    message: 'Invalid authorization token',
+                    details: 'Authorization token must be a non-empty string'
+                }
+            });
+        }
+
+        // Validate retry logic
+        if (retry === true) {
+            if (!idempotencyKey) {
+                return res.status(400).json({
+                    success: false,
+                    error: {
+                        code: 'RETRY_VALIDATION_ERROR',
+                        message: 'Idempotency key required for retry',
+                        details: 'idempotencyKey is required when retry is true'
+                    }
+                });
+            }
+            
+            // Check if payment with this idempotency key exists
+            const existingPaymentQuery = `
+                SELECT id, status, user_id, order_id, amount, currency, gateway_response, created_at, updated_at
+                FROM payments 
+                WHERE idempotency_key = $1
+            `;
+            const existingPayment = await dbPoolManager.executeRead(existingPaymentQuery, [idempotencyKey]);
+            
+            if (existingPayment.rows.length > 0) {
+                const existing = existingPayment.rows[0];
+                
+                // Check if payment is in a final state (SUCCEEDED, REFUNDED, CANCELLED)
+                if (['SUCCEEDED', 'REFUNDED', 'CANCELLED'].includes(existing.status)) {
+                    return res.status(200).json({
+                        success: true,
+                        message: 'Payment already completed',
+                        data: {
+                            id: existing.id,
+                            userId: existing.user_id,
+                            orderId: existing.order_id,
+                            amount: existing.amount,
+                            currency: existing.currency,
+                            status: existing.status,
+                            gatewayResponse: existing.gateway_response,
+                            idempotencyKey: idempotencyKey,
+                            retry: true,
+                            createdAt: existing.created_at,
+                            updatedAt: existing.updated_at
+                        }
+                    });
+                }
+                
+                // If payment is in retryable state (PENDING, FAILED), check Paystack status first
+                if (['PENDING', 'FAILED'].includes(existing.status)) {
+                    console.log(`Retrying payment ${existing.id} with idempotency key: ${idempotencyKey}`);
+                    
+                    // Check Paystack status first to see if payment actually succeeded
+                    try {
+                        const { syncPaymentStatusWithPaystack } = await import('../services/paymentProcessor.js');
+                        const syncResult = await syncPaymentStatusWithPaystack(idempotencyKey, existing.status);
+                        
+                        if (syncResult.success && syncResult.synced && syncResult.status !== existing.status) {
+                            console.log(`Payment ${existing.id} status updated from ${existing.status} to ${syncResult.status} via Paystack sync`);
+                            
+                            // Update the existing payment with the new status
+                            const updateQuery = `
+                                UPDATE payments 
+                                SET status = $1, gateway_response = $2, updated_at = NOW()
+                                WHERE id = $3
+                            `;
+                            
+                            await dbPoolManager.executeWrite(updateQuery, [
+                                syncResult.status,
+                                JSON.stringify(syncResult.gatewayResponse),
+                                existing.id
+                            ]);
+                            
+                            // If the payment is now successful, return it
+                            if (syncResult.status === 'SUCCEEDED') {
+                                return res.status(200).json({
+                                    success: true,
+                                    message: 'Payment completed successfully',
+                                    data: {
+                                        id: existing.id,
+                                        userId: existing.user_id,
+                                        orderId: existing.order_id,
+                                        amount: existing.amount,
+                                        currency: existing.currency,
+                                        status: syncResult.status,
+                                        gatewayResponse: syncResult.gatewayResponse,
+                                        idempotencyKey: idempotencyKey,
+                                        retry: true,
+                                        createdAt: existing.created_at,
+                                        updatedAt: new Date().toISOString()
+                                    }
+                                });
+                            }
+                            
+                            // If the payment status didn't change but we're retrying, return the existing payment
+                            if (syncResult.status === existing.status) {
+                                return res.status(200).json({
+                                    success: true,
+                                    message: 'Payment retry - returning existing payment data',
+                                    data: {
+                                        id: existing.id,
+                                        userId: existing.user_id,
+                                        orderId: existing.order_id,
+                                        amount: existing.amount,
+                                        currency: existing.currency,
+                                        status: existing.status,
+                                        gatewayResponse: existing.gateway_response,
+                                        idempotencyKey: idempotencyKey,
+                                        retry: true,
+                                        createdAt: existing.created_at,
+                                        updatedAt: existing.updated_at
+                                    }
+                                });
+                            }
+                        }
+                    } catch (syncError) {
+                        console.warn('Failed to sync payment status with Paystack:', syncError.message);
+                    }
+                    
+                    // If the existing payment is FAILED or PENDING and we're trying to retry with the same idempotency key,
+                    // Paystack will return a duplicate reference error. In this case, return the existing payment.
+                    if (existing.status === 'FAILED' || existing.status === 'PENDING') {
+                        console.log(`Payment ${existing.id} is ${existing.status}, returning existing payment data for retry`);
+                        return res.status(200).json({
+                            success: true,
+                            message: 'Payment retry - returning existing payment data',
+                            data: {
+                                id: existing.id,
+                                userId: existing.user_id,
+                                orderId: existing.order_id,
+                                amount: existing.amount,
+                                currency: existing.currency,
+                                status: existing.status,
+                                gatewayResponse: existing.gateway_response,
+                                idempotencyKey: idempotencyKey,
+                                retry: true,
+                                createdAt: existing.created_at,
+                                updatedAt: existing.updated_at
+                            }
+                        });
+                    }
+                    
+                    // Continue with the retry logic below for PENDING payments
+                } else {
+                    return res.status(409).json({
+                        success: false,
+                        error: {
+                            code: 'PAYMENT_IN_NON_RETRYABLE_STATE',
+                            message: 'Payment cannot be retried',
+                            details: `Payment with idempotency key is in state: ${existing.status}`,
+                            existing_payment_id: existing.id
+                        }
+                    });
+                }
+            }
         }
 
 
         // Validate metadata structure
         if (metadata && typeof metadata === 'object') {
-            // Validate user information in metadata
-            if (metadata.user) {
-                if (typeof metadata.user !== 'object') {
-                    return res.status(400).json({
-                        success: false,
-                        error: {
-                            code: 'INVALID_METADATA',
-                            message: 'Invalid user metadata',
-                            details: 'metadata.user must be an object'
-                        }
-                    });
-                }
-                
-                // Validate user ID matches the main userId
-                if (metadata.user.id && metadata.user.id !== user_id) {
-                    return res.status(400).json({
-                        success: false,
-                        error: {
-                            code: 'USER_ID_MISMATCH',
-                            message: 'User ID mismatch',
-                            details: 'metadata.user.id must match the main userId'
-                        }
-                    });
-                }
-            }
 
             // Validate order information in metadata
             if (metadata.order) {
@@ -174,9 +352,33 @@ router.post('/', async (req, res) => {
                     return res.status(400).json({
                         success: false,
                         error: {
-                            code: 'INVALID_METADATA',
+                            code: 'INVALID_ORDER_METADATA',
                             message: 'Invalid order metadata',
                             details: 'metadata.order must be an object'
+                        }
+                    });
+                }
+                
+                // Validate required order fields
+                if (!metadata.order.id) {
+                    return res.status(400).json({
+                        success: false,
+                        error: {
+                            code: 'MISSING_ORDER_ID',
+                            message: 'Order ID is required',
+                            details: 'metadata.order.id is required'
+                        }
+                    });
+                }
+                
+                // Validate order ID matches the main orderId
+                if (metadata.order.id !== order_id) {
+                    return res.status(400).json({
+                        success: false,
+                        error: {
+                            code: 'ORDER_ID_MISMATCH',
+                            message: 'Order ID mismatch',
+                            details: 'metadata.order.id must match the main orderId'
                         }
                     });
                 }
@@ -187,28 +389,74 @@ router.post('/', async (req, res) => {
         // Generate idempotency key if not provided
         const finalIdempotencyKey = idempotencyKey || `ref_${user_id}_${order_id}_${Date.now()}`;
 
-        // Create payment in database first
-                    const query = `
-                        SELECT * FROM create_payment_working(
-                            $1, $2, $3, $4, $5, $6, $7, $8, $9
-                        )
-                    `;
+        let paymentResult;
+        let existingPaymentId = null;
 
-        const result = await dbPoolManager.executeWrite(query, [
-            user_id,
-            order_id,
-            amount,
-            currency,
-            null, // payment_method_id (not needed for Paystack)
-            JSON.stringify({}), // gateway_response (will be updated after processing)
-            finalIdempotencyKey,
-            retry,
-            JSON.stringify(metadata) // metadata
-        ]);
+        // Note: Retry logic is handled above in the retry validation section
 
-        const paymentResult = result.rows[0];
+        // If not retrying or no existing payment found, create new payment
+        if (!paymentResult) {
+            const query = `
+                SELECT * FROM create_payment_working(
+                    $1, $2, $3, $4, $5, $6, $7, $8
+                )
+            `;
+
+            const result = await dbPoolManager.executeWrite(query, [
+                user_id,
+                order_id,
+                amount,
+                currency,
+                JSON.stringify({}), // gateway_response (will be updated after processing)
+                finalIdempotencyKey,
+                retry,
+                JSON.stringify(metadata) // metadata
+            ]);
+
+            paymentResult = result.rows[0];
+        }
 
         if (!paymentResult.success) {
+            // Handle duplicate idempotency key error specially
+            if (paymentResult.error_message === 'Duplicate idempotency key') {
+                console.log(`Duplicate idempotency key detected: ${finalIdempotencyKey}, returning existing payment data`);
+                
+                // Get the existing payment data
+                const existingPaymentQuery = `
+                    SELECT id, status, gateway_response, created_at, updated_at, user_id, order_id, amount, currency
+                    FROM payments 
+                    WHERE idempotency_key = $1
+                    ORDER BY created_at ASC
+                    LIMIT 1
+                `;
+                
+                const existingPayment = await dbPoolManager.executeRead(existingPaymentQuery, [finalIdempotencyKey]);
+                
+                if (existingPayment.rows.length > 0) {
+                    const existing = existingPayment.rows[0];
+                    console.log(`Found existing payment ${existing.id} for duplicate idempotency key`);
+                    
+                    return res.status(200).json({
+                        success: true,
+                        message: 'Duplicate idempotency key detected - returning existing payment data',
+                        data: {
+                            id: existing.id,
+                            userId: existing.user_id,
+                            orderId: existing.order_id,
+                            amount: existing.amount,
+                            currency: existing.currency,
+                            status: existing.status,
+                            gatewayResponse: existing.gateway_response,
+                            idempotencyKey: finalIdempotencyKey,
+                            retry: retry,
+                            metadata: metadata,
+                            createdAt: existing.created_at,
+                            updatedAt: existing.updated_at
+                        }
+                    });
+                }
+            }
+            
             return res.status(400).json({
                 success: false,
                 error: {
@@ -250,6 +498,34 @@ router.post('/', async (req, res) => {
                 paymentResult.payment_id
             ]);
 
+            // Sync payment status with Paystack for real-time updates
+            try {
+                console.log(`Syncing payment status with Paystack for reference: ${finalIdempotencyKey}`);
+                const syncResult = await syncPaymentStatusWithPaystack(finalIdempotencyKey, gatewayResult.status);
+                
+                if (syncResult.success && syncResult.synced && syncResult.status !== gatewayResult.status) {
+                    console.log(`Payment status updated from ${gatewayResult.status} to ${syncResult.status} via Paystack sync`);
+                    
+                    // Update database with latest status from Paystack
+                    const syncUpdateQuery = `
+                        UPDATE payments 
+                        SET status = $1, gateway_response = $2, updated_at = NOW()
+                        WHERE id = $3
+                    `;
+                    
+                    await dbPoolManager.executeWrite(syncUpdateQuery, [
+                        syncResult.status,
+                        JSON.stringify(syncResult.gatewayResponse),
+                        paymentResult.payment_id
+                    ]);
+                    
+                    gatewayResult.status = syncResult.status;
+                    gatewayResult.gatewayResponse = syncResult.gatewayResponse;
+                }
+            } catch (syncError) {
+                console.warn('Failed to sync payment status with Paystack:', syncError.message);
+            }
+
             // Publish payment event
             try {
                 await publishPaymentEvent('payment_processed', {
@@ -258,24 +534,141 @@ router.post('/', async (req, res) => {
                     userId: user_id,
                     amount: amount,
                     status: gatewayResult.status,
-                    gateway: gateway,
+                    gateway: 'paystack',
                     correlationId: finalIdempotencyKey
                 });
             } catch (eventError) {
                 console.warn('Failed to publish payment event:', eventError.message);
             }
         } else {
-            // Update payment with failure status
-            const updateQuery = `
-                UPDATE payments 
-                SET status = 'FAILED', gateway_response = $1, updated_at = NOW()
-                WHERE id = $2
+            // Handle duplicate reference error by checking existing payment
+            if (gatewayResult.error?.code === 'DUPLICATE_REFERENCE' || gatewayResult.error?.shouldReturnExisting) {
+                console.log(`Duplicate reference detected for ${finalIdempotencyKey}, checking existing payment...`);
+                
+                // Check if we have an existing payment with this idempotency key
+                const existingPaymentQuery = `
+                    SELECT id, status, gateway_response, created_at, updated_at
+                    FROM payments 
+                    WHERE idempotency_key = $1
+                `;
+                
+                const existingPayment = await dbPoolManager.executeRead(existingPaymentQuery, [finalIdempotencyKey]);
+                
+                if (existingPayment.rows.length > 0) {
+                    const existing = existingPayment.rows[0];
+                    console.log(`Found existing payment ${existing.id} with status: ${existing.status}`);
+                    
+                    // Always return the existing payment data so user can see what happened
+                    console.log(`Returning existing payment ${existing.id} for duplicate reference handling`);
+                    
+                    // Update the current payment to match the existing one
+                    const syncQuery = `
+                        UPDATE payments 
+                        SET status = $1, gateway_response = $2, updated_at = NOW()
+                        WHERE id = $3
+                    `;
+                    
+                    await dbPoolManager.executeWrite(syncQuery, [
+                        existing.status,
+                        existing.gateway_response,
+                        paymentResult.payment_id
+                    ]);
+                    
+                    // Override the gateway result to return existing payment data
+                    gatewayResult.success = true;
+                    gatewayResult.status = existing.status;
+                    gatewayResult.gatewayResponse = existing.gateway_response;
+                    
+                    // Publish event
+                    await publishPaymentEvent('payment_processed', {
+                        payment_id: paymentResult.payment_id,
+                        orderId: order_id,
+                        userId: user_id,
+                        amount: amount,
+                        status: existing.status,
+                        gateway: 'paystack',
+                        correlationId: finalIdempotencyKey,
+                        source: 'duplicate_reference_recovery'
+                    });
+                } else {
+                    // No existing payment found, treat as regular failure
+                    const updateQuery = `
+                        UPDATE payments 
+                        SET status = 'FAILED', gateway_response = $1, updated_at = NOW()
+                        WHERE id = $2
+                    `;
+                    
+                    await dbPoolManager.executeWrite(updateQuery, [
+                        JSON.stringify(gatewayResult.error),
+                        paymentResult.payment_id
+                    ]);
+                }
+            } else {
+                // Regular failure handling - but don't update gateway response for duplicate reference errors
+                if (gatewayResult.error?.code === 'DUPLICATE_REFERENCE') {
+                    // For duplicate reference errors, don't update the gateway response
+                    // The existing payment's original gateway response should be preserved
+                    console.log(`Skipping gateway response update for duplicate reference error on payment ${paymentResult.payment_id}`);
+                } else {
+                    // Regular failure handling
+                    const updateQuery = `
+                        UPDATE payments 
+                        SET status = 'FAILED', gateway_response = $1, updated_at = NOW()
+                        WHERE id = $2
+                    `;
+                    
+                    await dbPoolManager.executeWrite(updateQuery, [
+                        JSON.stringify(gatewayResult.error),
+                        paymentResult.payment_id
+                    ]);
+                }
+            }
+        }
+
+        // Get the actual idempotency key from the database
+        const idempotencyQuery = `
+            SELECT idempotency_key FROM payments WHERE id = $1
+        `;
+        const idempotencyResult = await dbPoolManager.executeRead(idempotencyQuery, [paymentResult.payment_id]);
+        const actualIdempotencyKey = idempotencyResult.rows[0]?.idempotency_key || finalIdempotencyKey;
+
+        // Handle duplicate reference error in response
+        if (!gatewayResult.success && gatewayResult.error?.code === 'DUPLICATE_REFERENCE') {
+            // Check if we have an existing payment with this idempotency key
+            const existingPaymentQuery = `
+                SELECT id, status, gateway_response, created_at, updated_at, user_id, order_id, amount, currency
+                FROM payments 
+                WHERE idempotency_key = $1
+                ORDER BY created_at ASC
+                LIMIT 1
             `;
             
-            await dbPoolManager.executeWrite(updateQuery, [
-                JSON.stringify(gatewayResult.error),
-                paymentResult.payment_id
-            ]);
+            const existingPayment = await dbPoolManager.executeRead(existingPaymentQuery, [actualIdempotencyKey]);
+            
+            if (existingPayment.rows.length > 0) {
+                const existing = existingPayment.rows[0];
+                console.log(`Found existing payment ${existing.id} for duplicate reference response`);
+                
+                // Return the existing payment data
+                return res.status(200).json({
+                    success: true,
+                    message: 'Duplicate reference detected - returning existing payment',
+                    data: {
+                        id: existing.id,
+                        userId: existing.user_id,
+                        orderId: existing.order_id,
+                        amount: existing.amount,
+                        currency: existing.currency,
+                        status: existing.status,
+                        gatewayResponse: existing.gateway_response,
+                        idempotencyKey: actualIdempotencyKey,
+                        retry: retry,
+                        metadata: metadata,
+                        createdAt: existing.created_at,
+                        updatedAt: existing.updated_at
+                    }
+                });
+            }
         }
 
         // Return response
@@ -288,7 +681,7 @@ router.post('/', async (req, res) => {
             currency: currency,
             status: gatewayResult.success ? gatewayResult.status : 'FAILED',
             gatewayResponse: gatewayResult.success ? gatewayResult.gatewayResponse : gatewayResult.error,
-            idempotencyKey: finalIdempotencyKey,
+            idempotencyKey: actualIdempotencyKey,
             retry: retry,
             metadata: metadata,
             createdAt: paymentResult.created_at,
@@ -328,10 +721,7 @@ router.post('/', async (req, res) => {
     }
 });
 
-/**
- * GET /payments/methods - Use methods router
- */
-router.use('/methods', methodsRouter);
+// Payment methods endpoints removed - handled by gateway directly
 
 /**
  * GET /payments/{id} - Get payment by ID
@@ -352,14 +742,12 @@ router.get('/:id', async (req, res) => {
             });
         }
 
-        const query = `
-            SELECT * FROM get_payment_by_id($1)
-        `;
+        // Use archival lookup function to check both main and archived tables
+        const query = `SELECT * FROM get_payment_with_archive($1)`;
 
         const result = await dbPoolManager.executeRead(query, [id]);
-        const payment = result.rows[0];
-
-        if (!payment || !payment.found) {
+        
+        if (result.rows.length === 0) {
             return res.status(404).json({
                 success: false,
                 error: {
@@ -370,6 +758,8 @@ router.get('/:id', async (req, res) => {
             });
         }
 
+        const payment = result.rows[0];
+
         res.json({
             success: true,
             data: {
@@ -379,9 +769,9 @@ router.get('/:id', async (req, res) => {
                 amount: payment.amount,
                 currency: payment.currency,
                 status: payment.status,
-                paymentMethodId: payment.payment_method_id,
                 gatewayResponse: payment.gateway_response,
                 idempotencyKey: payment.idempotency_key,
+                metadata: payment.metadata,
                 createdAt: payment.created_at,
                 updatedAt: payment.updated_at
             },
@@ -427,15 +817,13 @@ router.get('/user/:userId', async (req, res) => {
         const limitNum = Math.min(parseInt(limit) || 20, 100);
         const offsetNum = Math.max(parseInt(offset) || 0, 0);
 
-        const query = `
-            SELECT * FROM get_payments_by_user($1, $2, $3, $4)
-        `;
+        // Use archival lookup function to get user payments from both main and archived tables
+        const query = `SELECT * FROM get_user_payments_with_archive($1, $2, $3)`;
 
         const result = await dbPoolManager.executeRead(query, [
             userId,
             limitNum,
-            offsetNum,
-            status && status !== '0' ? status : null
+            offsetNum
         ]);
 
         const payments = result.rows.map(row => ({
@@ -445,9 +833,9 @@ router.get('/user/:userId', async (req, res) => {
             amount: row.amount,
             currency: row.currency,
             status: row.status,
-            paymentMethodId: row.payment_method_id,
             gatewayResponse: row.gateway_response,
             idempotencyKey: row.idempotency_key,
+            metadata: row.metadata,
             createdAt: row.created_at,
             updatedAt: row.updated_at
         }));

@@ -23,7 +23,6 @@ CREATE OR REPLACE FUNCTION create_payment_with_history(
     p_order_id VARCHAR(255),
     p_amount INTEGER,
     p_currency CHAR(3),
-    p_payment_method_id UUID DEFAULT NULL,
     p_gateway_response JSONB DEFAULT '{}',
     p_idempotency_key VARCHAR(255) DEFAULT NULL,
     p_retry BOOLEAN DEFAULT FALSE,
@@ -86,17 +85,17 @@ BEGIN
         -- Insert payment
         INSERT INTO payments (
             user_id, order_id, amount, currency, status, 
-            payment_method_id, gateway_response, idempotency_key, metadata
+            gateway_response, idempotency_key, metadata
         ) VALUES (
             p_user_id, p_order_id, p_amount, p_currency, payment_status,
-            p_payment_method_id, p_gateway_response, p_idempotency_key, p_metadata
+            p_gateway_response, p_idempotency_key, p_metadata
         ) RETURNING id, created_at INTO new_payment_id, payment_created_at;
         
         -- Insert payment history entry
         INSERT INTO payment_history (
-            payment_id, status, created_at, metadata
+            payment_id, status, metadata
         ) VALUES (
-            new_payment_id, payment_status, payment_created_at, p_metadata
+            new_payment_id, payment_status, p_metadata
         );
         
         RETURN QUERY SELECT new_payment_id, payment_status, payment_created_at, TRUE, NULL::TEXT;
@@ -119,7 +118,6 @@ CREATE OR REPLACE FUNCTION get_payment_by_id(
     amount INTEGER,
     currency CHAR(3),
     status payment_status,
-    payment_method_id UUID,
     gateway_response JSONB,
     idempotency_key VARCHAR(255),
     created_at TIMESTAMPTZ,
@@ -131,7 +129,7 @@ BEGIN
     RETURN QUERY
     SELECT 
         p.id, p.user_id, p.order_id, p.amount, p.currency,
-        p.status, p.payment_method_id, p.gateway_response,
+        p.status, p.gateway_response,
         p.idempotency_key, p.created_at, p.updated_at,
         TRUE as found
     FROM payments p
@@ -163,7 +161,6 @@ CREATE OR REPLACE FUNCTION get_payments_by_user(
     amount INTEGER,
     currency CHAR(3),
     status payment_status,
-    payment_method_id UUID,
     gateway_response JSONB,
     idempotency_key VARCHAR(255),
     created_at TIMESTAMPTZ,
@@ -183,7 +180,7 @@ BEGIN
     RETURN QUERY
     SELECT 
         p.id, p.user_id, p.order_id, p.amount, p.currency,
-        p.status, p.payment_method_id, p.gateway_response,
+        p.status, p.gateway_response,
         p.idempotency_key, p.created_at, p.updated_at,
         total_count
     FROM payments p
@@ -863,8 +860,48 @@ COMMENT ON FUNCTION create_payment_with_history IS 'Creates a payment with atomi
 COMMENT ON FUNCTION get_payment_by_id IS 'Safely retrieves payment by ID from main or archive table';
 COMMENT ON FUNCTION get_payments_by_user IS 'Safely retrieves paginated payments for a user';
 COMMENT ON FUNCTION update_payment_status IS 'Updates payment status with atomic history entry';
+-- Function to safely read all payment history
+-- This function is replica-safe and handles pagination
+CREATE OR REPLACE FUNCTION get_all_payment_history(
+    p_limit INTEGER DEFAULT 100,
+    p_offset INTEGER DEFAULT 0
+) RETURNS TABLE(
+    payment_id UUID,
+    user_id UUID,
+    order_id VARCHAR(255),
+    amount INTEGER,
+    currency CHAR(3),
+    status payment_status,
+    gateway_response JSONB,
+    idempotency_key VARCHAR(255),
+    metadata JSONB,
+    created_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ,
+    total_count BIGINT
+) AS $$
+DECLARE
+    total_count BIGINT;
+BEGIN
+    -- Get total count
+    SELECT COUNT(*) INTO total_count
+    FROM payments;
+    
+    -- Return paginated results
+    RETURN QUERY
+    SELECT 
+        p.id, p.user_id, p.order_id, p.amount, p.currency,
+        p.status, p.gateway_response, p.idempotency_key, p.metadata,
+        p.created_at, p.updated_at, total_count
+    FROM payments p
+    ORDER BY p.created_at DESC
+    LIMIT p_limit
+    OFFSET p_offset;
+END;
+$$ LANGUAGE plpgsql;
+
 COMMENT ON FUNCTION get_payment_history IS 'Safely retrieves paginated payment history';
 COMMENT ON FUNCTION get_user_payment_history IS 'Safely retrieves paginated user payment history';
+COMMENT ON FUNCTION get_all_payment_history IS 'Safely retrieves all payment history with pagination';
 COMMENT ON FUNCTION create_refund IS 'Creates a refund with validation and idempotency support';
 COMMENT ON FUNCTION get_refund_by_id IS 'Safely retrieves refund by ID from main or archive table';
 COMMENT ON FUNCTION get_refunds_by_payment IS 'Safely retrieves paginated refunds for a payment';

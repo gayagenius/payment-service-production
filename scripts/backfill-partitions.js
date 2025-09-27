@@ -200,7 +200,7 @@ async function migratePayments(sourceCount) {
       // Get batch of payments
       const batchQuery = `
         SELECT id, user_id, order_id, amount, currency, status, 
-               payment_method_id, gateway_response, idempotency_key, 
+               metadata, gateway_response, idempotency_key, 
                created_at, updated_at
         FROM payments 
         ORDER BY created_at ASC
@@ -219,7 +219,7 @@ async function migratePayments(sourceCount) {
         const insertQuery = `
           INSERT INTO payments_partitioned (
             id, user_id, order_id, amount, currency, status,
-            payment_method_id, gateway_response, idempotency_key,
+            metadata, gateway_response, idempotency_key,
             created_at, updated_at
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         `;
@@ -227,7 +227,7 @@ async function migratePayments(sourceCount) {
         for (const row of batch.rows) {
           await client.query(insertQuery, [
             row.id, row.user_id, row.order_id, row.amount, row.currency,
-            row.status, row.payment_method_id, row.gateway_response,
+            row.status, row.metadata, row.gateway_response,
             row.idempotency_key, row.created_at, row.updated_at
           ]);
         }

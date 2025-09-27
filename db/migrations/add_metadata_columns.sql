@@ -13,7 +13,6 @@ CREATE OR REPLACE FUNCTION create_payment_with_history(
     p_order_id VARCHAR(255),
     p_amount INTEGER,
     p_currency CHAR(3),
-    p_payment_method_id UUID DEFAULT NULL,
     p_gateway_response JSONB DEFAULT '{}',
     p_idempotency_key VARCHAR(255) DEFAULT NULL,
     p_retry BOOLEAN DEFAULT FALSE,
@@ -76,10 +75,10 @@ BEGIN
         -- Insert payment
         INSERT INTO payments (
             user_id, order_id, amount, currency, status, 
-            payment_method_id, gateway_response, idempotency_key, metadata
+            gateway_response, idempotency_key, metadata
         ) VALUES (
             p_user_id, p_order_id, p_amount, p_currency, payment_status,
-            p_payment_method_id, p_gateway_response, p_idempotency_key, p_metadata
+            p_gateway_response, p_idempotency_key, p_metadata
         ) RETURNING id, created_at INTO new_payment_id, payment_created_at;
         
         -- Insert payment history entry

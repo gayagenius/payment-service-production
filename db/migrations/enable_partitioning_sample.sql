@@ -15,7 +15,6 @@ CREATE TABLE payments_partitioned (
     amount INTEGER NOT NULL,
     currency CHAR(3) NOT NULL,
     status payment_status NOT NULL DEFAULT 'PENDING',
-    payment_method_id UUID NULL,
     gateway_response JSONB NOT NULL DEFAULT '{}',
     idempotency_key VARCHAR(255) NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -143,7 +142,6 @@ CREATE TABLE payments_archive (
     amount INTEGER NOT NULL,
     currency CHAR(3) NOT NULL,
     status payment_status NOT NULL,
-    payment_method_id UUID NULL,
     gateway_response JSONB NOT NULL DEFAULT '{}',
     idempotency_key VARCHAR(255) NULL,
     created_at TIMESTAMPTZ NOT NULL,
@@ -195,7 +193,6 @@ CREATE TABLE payment_reports (
     amount INTEGER NOT NULL,
     currency CHAR(3) NOT NULL,
     status payment_status NOT NULL,
-    payment_method_id UUID NULL,
     gateway_response JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
@@ -221,7 +218,7 @@ ALTER TABLE refunds_partitioned ADD CONSTRAINT refunds_partitioned_pkey PRIMARY 
 -- Indexes on partitioned tables
 CREATE INDEX idx_payments_partitioned_user_id_created ON payments_partitioned(user_id, created_at DESC);
 CREATE INDEX idx_payments_partitioned_status_created ON payments_partitioned(status, created_at DESC);
-CREATE INDEX idx_payments_partitioned_payment_method_id ON payments_partitioned(payment_method_id) WHERE payment_method_id IS NOT NULL;
+-- Payment method index removed
 CREATE INDEX idx_payments_partitioned_order_id ON payments_partitioned(order_id) WHERE order_id IS NOT NULL;
 
 CREATE INDEX idx_refunds_partitioned_payment_id_created ON refunds_partitioned(payment_id, created_at DESC);
@@ -340,12 +337,12 @@ BEGIN
         )
         INSERT INTO payments_archive (
             id, user_id, order_id, amount, currency, status, 
-            payment_method_id, gateway_response, idempotency_key, 
+            gateway_response, idempotency_key, 
             created_at, updated_at
         )
         SELECT 
             id, user_id, order_id, amount, currency, status,
-            payment_method_id, gateway_response, idempotency_key,
+            gateway_response, idempotency_key,
             created_at, updated_at
         FROM payments_to_archive;
         
@@ -382,12 +379,12 @@ BEGIN
     )
     INSERT INTO payments_archive (
         id, user_id, order_id, amount, currency, status, 
-        payment_method_id, gateway_response, idempotency_key, 
+        gateway_response, idempotency_key, 
         created_at, updated_at
     )
     SELECT 
         id, user_id, order_id, amount, currency, status,
-        payment_method_id, gateway_response, idempotency_key,
+        gateway_response, idempotency_key,
         created_at, updated_at
     FROM payments_to_archive;
     
@@ -417,11 +414,11 @@ BEGIN
     -- Generate reports for payments older than 1 year
     INSERT INTO payment_reports (
         payment_id, user_id, order_id, amount, currency, status,
-        payment_method_id, gateway_response, created_at, updated_at
+        gateway_response, created_at, updated_at
     )
     SELECT 
         id, user_id, order_id, amount, currency, status,
-        payment_method_id, gateway_response, created_at, updated_at
+        gateway_response, created_at, updated_at
     FROM payments_partitioned 
     WHERE created_at < NOW() - INTERVAL '1 year'
     AND id NOT IN (SELECT payment_id FROM payment_reports);

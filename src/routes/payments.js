@@ -33,7 +33,7 @@ router.get('/', async (req, res) => {
         // Build query
         let query = `
             SELECT p.id, p.user_id, p.order_id, p.amount, p.currency, p.status,
-                   p.payment_method_id, p.gateway_response, p.idempotency_key,
+                   p.gateway_response, p.idempotency_key, p.metadata,
                    p.created_at, p.updated_at
             FROM payments_partitioned p
             WHERE 1=1
@@ -103,7 +103,7 @@ router.get('/', async (req, res) => {
  * - order_id: Order identifier
  * - amount: Payment amount in minor units
  * - currency: Currency code (3 characters)
- * - payment_method_id: Optional payment method ID
+ * - metadata: Optional payment metadata
  * - gateway_response: Optional gateway response data
  * - idempotency_key: Optional idempotency key for retry safety
  * - retry: Boolean indicating if this is a retry attempt
@@ -115,7 +115,7 @@ router.post('/', async (req, res) => {
             order_id,
             amount,
             currency,
-            payment_method_id,
+            metadata,
             gateway_response = {},
             idempotency_key,
             retry = false
@@ -172,7 +172,7 @@ router.post('/', async (req, res) => {
             order_id,
             amount,
             currency,
-            payment_method_id,
+            metadata,
             JSON.stringify(gateway_response),
             finalIdempotencyKey,
             retry
@@ -216,7 +216,7 @@ router.post('/', async (req, res) => {
                 amount,
                 currency,
                 status: paymentResult.status,
-                payment_method_id,
+                metadata,
                 gateway_response,
                 idempotency_key: finalIdempotencyKey,
                 created_at: paymentResult.created_at,
@@ -286,7 +286,7 @@ router.get('/:id', async (req, res) => {
                 amount: payment.amount,
                 currency: payment.currency,
                 status: payment.status,
-                payment_method_id: payment.payment_method_id,
+                metadata: payment.metadata,
                 gateway_response: payment.gateway_response,
                 idempotency_key: payment.idempotency_key,
                 created_at: payment.created_at,
@@ -445,7 +445,7 @@ router.get('/user/:userId', async (req, res) => {
                 amount: payment.amount,
                 currency: payment.currency,
                 status: payment.status,
-                payment_method_id: payment.payment_method_id,
+                metadata: payment.metadata,
                 gateway_response: payment.gateway_response,
                 idempotency_key: payment.idempotency_key,
                 created_at: payment.created_at,

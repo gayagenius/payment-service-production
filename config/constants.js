@@ -19,19 +19,27 @@ export const APP_CONFIG = {
 
 export const DB_CONFIG = {
   WRITE_POOL: {
-    MAX: 20,
-    MIN: 5,
+    MAX: 50, // Increased for high load
+    MIN: 10, // Increased minimum connections
     IDLE_TIMEOUT: 30000,
-    CONNECTION_TIMEOUT: 2000,
-    ACQUIRE_TIMEOUT: 10000,
+    CONNECTION_TIMEOUT: 5000, // Increased timeout
+    ACQUIRE_TIMEOUT: 60000, // Increased acquire timeout
+    CREATE_TIMEOUT: 30000,
+    DESTROY_TIMEOUT: 5000,
+    REAP_INTERVAL: 1000,
+    CREATE_RETRY_INTERVAL: 200,
   },
   
   READ_POOL: {
-    MAX: 50,
-    MIN: 10,
+    MAX: 100, // Increased for read-heavy workloads
+    MIN: 20, // Increased minimum connections
     IDLE_TIMEOUT: 30000,
-    CONNECTION_TIMEOUT: 2000,
-    ACQUIRE_TIMEOUT: 10000,
+    CONNECTION_TIMEOUT: 5000, // Increased timeout
+    ACQUIRE_TIMEOUT: 60000, // Increased acquire timeout
+    CREATE_TIMEOUT: 30000,
+    DESTROY_TIMEOUT: 5000,
+    REAP_INTERVAL: 1000,
+    CREATE_RETRY_INTERVAL: 200,
   },
   
   HEALTH_CHECK: {

@@ -6,6 +6,7 @@
 import { 
     initializePayment, 
     verifyPayment, 
+    getLatestPaymentStatus,
     processRefund as paystackRefund, 
     verifyWebhook as paystackVerifyWebhook, 
     handleWebhook as paystackHandleWebhook,
@@ -68,15 +69,41 @@ export const processPayment = async (paymentData) => {
         // Generate reference for Paystack
         const reference = idempotencyKey || `ref_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+        // Prepare customer data for Paystack
+        const customerData = metadata.user ? {
+            first_name: metadata.user.first_name || metadata.user.name?.split(' ')[0] || 'Customer',
+            last_name: metadata.user.last_name || metadata.user.name?.split(' ').slice(1).join(' ') || '',
+            email: metadata.user.email || `${userId}@example.com`,
+            phone: metadata.user.phone || '',
+            user_id: userId,
+            metadata: {
+                user_id: userId,
+                order_id: orderId,
+                ...metadata.user.metadata
+            }
+        } : {
+            first_name: 'Customer',
+            last_name: '',
+            email: `${userId}@example.com`,
+            phone: '',
+            user_id: userId,
+            metadata: {
+                user_id: userId,
+                order_id: orderId
+            }
+        };
+
         // Prepare payment data for Paystack
         const paystackPaymentData = {
             amount: amount,
             currency: currency,
-            email: metadata.user?.email || `${userId}@example.com`,
+            email: customerData.email,
             reference: reference,
+            customer: customerData,
             metadata: {
                 user_id: userId,
                 order_id: orderId,
+                payment_id: metadata.payment_id,
                 ...metadata
             },
             callback_url: `${process.env.BASE_URL || 'http://localhost:8888'}/payments/return`
@@ -86,6 +113,19 @@ export const processPayment = async (paymentData) => {
         const result = await initializePayment(paystackPaymentData);
 
         if (!result.success) {
+            // Handle duplicate reference error specially
+            if (result.error?.code === 'DUPLICATE_REFERENCE') {
+                return {
+                    success: false,
+                    error: {
+                        code: 'DUPLICATE_REFERENCE',
+                        message: 'Duplicate reference detected - payment may already exist',
+                        details: result.error.details,
+                        type: 'duplicate_reference_error',
+                        shouldReturnExisting: true
+                    }
+                };
+            }
             return result;
         }
 
@@ -123,6 +163,55 @@ export const queryPaymentStatus = async (transactionId) => {
             error: {
                 code: 'VERIFICATION_ERROR',
                 message: 'Payment verification failed',
+                details: error.message
+            }
+        };
+    }
+};
+
+/**
+ * Sync payment status with Paystack
+ * This function retrieves the latest status from Paystack and updates the database
+ */
+export const syncPaymentStatusWithPaystack = async (reference, currentStatus) => {
+    try {
+        // Skip sync if payment is already in a final state
+        if (['SUCCEEDED', 'FAILED', 'REFUNDED'].includes(currentStatus)) {
+            console.log(`Skipping Paystack sync for payment ${reference} - already in final state: ${currentStatus}`);
+            return {
+                success: true,
+                skipped: true,
+                reason: 'Payment already in final state',
+                currentStatus
+            };
+        }
+
+        console.log(`Syncing payment status with Paystack for reference: ${reference}`);
+        
+        const result = await getLatestPaymentStatus(reference);
+        
+        if (!result.success) {
+            console.error(`Failed to sync payment status: ${result.error.message}`);
+            return result;
+        }
+
+        console.log(`Payment ${reference} synced with Paystack - Status: ${result.status}`);
+        
+        return {
+            success: true,
+            transactionId: result.transactionId,
+            status: result.status,
+            gatewayResponse: result.gatewayResponse,
+            synced: true
+        };
+
+    } catch (error) {
+        console.error(`Error syncing payment status for ${reference}:`, error);
+        return {
+            success: false,
+            error: {
+                code: 'SYNC_ERROR',
+                message: 'Payment status sync failed',
                 details: error.message
             }
         };

@@ -47,7 +47,7 @@ const productionQueries = [
     name: 'get_payments_by_user',
     query: `
       SELECT p.id, p.user_id, p.order_id, p.amount, p.currency, p.status, 
-             p.payment_method_id, p.created_at, p.updated_at
+             p.metadata, p.created_at, p.updated_at
       FROM payments_partitioned p
       WHERE p.user_id = $1
       ORDER BY p.created_at DESC
@@ -60,7 +60,7 @@ const productionQueries = [
     name: 'get_payment_by_id',
     query: `
       SELECT p.id, p.user_id, p.order_id, p.amount, p.currency, p.status,
-             p.payment_method_id, p.gateway_response, p.idempotency_key,
+             p.metadata, p.gateway_response, p.idempotency_key,
              p.created_at, p.updated_at
       FROM payments_partitioned p
       WHERE p.id = $1

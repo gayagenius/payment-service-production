@@ -41,25 +41,81 @@ async function updatePaymentFromWebhook(payment_id, status, gatewayResponse) {
 }
 
 /**
+ * Update payment by Paystack reference
+ */
+async function updatePaymentByReference(reference, status, gatewayResponse) {
+    try {
+        console.log(`Looking up payment with reference: ${reference}`);
+        
+        // Find payment by reference (stored in idempotency_key)
+        const findQuery = `
+            SELECT id FROM payments 
+            WHERE idempotency_key = $1
+        `;
+        
+        const findResult = await dbPoolManager.executeRead(findQuery, [reference]);
+        
+        if (findResult.rows.length === 0) {
+            console.error(`Payment not found for reference: ${reference}`);
+            throw new Error(`Payment not found for reference: ${reference}`);
+        }
+        
+        const payment_id = findResult.rows[0].id;
+        console.log(`Found payment ID: ${payment_id} for reference: ${reference}`);
+        
+        // Update payment status, gateway_response, and updated_at
+        const updateQuery = `
+            UPDATE payments 
+            SET 
+                status = $1,
+                gateway_response = $2,
+                updated_at = NOW()
+            WHERE id = $3
+        `;
+        
+        await dbPoolManager.executeWrite(updateQuery, [
+            status,
+            JSON.stringify(gatewayResponse),
+            payment_id
+        ]);
+
+        // Publish payment event
+        await publishPaymentEvent('payment_updated', {
+            payment_id,
+            status,
+            gatewayResponse,
+            source: 'webhook'
+        });
+
+        console.log(`✅ Payment ${payment_id} updated to ${status} via webhook`);
+    } catch (error) {
+        console.error('❌ Failed to update payment from webhook:', error);
+        throw error;
+    }
+}
+
+/**
  * POST /webhooks/paystack - Handle Paystack webhooks
  */
 router.post('/paystack', express.json(), async (req, res) => {
     try {
         // Verify webhook signature
-        if (!verifyWebhookSignature('paystack', req)) {
+        const signature = req.headers['x-paystack-signature'];
+        if (!verifyWebhookSignature(JSON.stringify(req.body), signature, 'paystack')) {
             return res.status(400).json({ success: false, message: 'Invalid Paystack webhook signature' });
         }
 
         const event = req.body;
-        const processedEvent = handleWebhookEvent('paystack', event);
-
-        if (processedEvent && processedEvent.type === 'payment_update') {
-            const { payment_id, status, gatewayResponse } = processedEvent;
-            await updatePaymentFromWebhook(payment_id, status, gatewayResponse);
-        } else if (processedEvent && processedEvent.type === 'refund_update') {
-            // Handle refund updates
-            const { refundId, status, gatewayResponse } = processedEvent;
-            console.log(`Paystack refund ${refundId} status updated to ${status} via webhook`);
+        const { event: eventType, data } = event;
+        
+        console.log(`Received Paystack webhook: ${eventType}, reference: ${data.reference}`);
+        
+        if (eventType === 'charge.success') {
+            await updatePaymentByReference(data.reference, 'SUCCEEDED', data);
+        } else if (eventType === 'charge.failed') {
+            await updatePaymentByReference(data.reference, 'FAILED', data);
+        } else {
+            console.log(`Unhandled webhook event: ${eventType}`);
         }
 
         res.status(200).json({ success: true, message: 'Webhook received and processed' });

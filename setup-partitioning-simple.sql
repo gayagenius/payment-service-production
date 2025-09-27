@@ -13,7 +13,7 @@ CREATE TABLE payments_partitioned (
     amount INTEGER NOT NULL,
     currency CHAR(3) NOT NULL,
     status payment_status NOT NULL DEFAULT 'PENDING',
-    payment_method_id UUID NULL REFERENCES user_payment_methods(id),
+    metadata JSONB NOT NULL DEFAULT '{}',
     gateway_response JSONB NOT NULL DEFAULT '{}',
     idempotency_key VARCHAR(255) NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -206,7 +206,7 @@ CREATE TABLE refunds_partitioned_2025_12 PARTITION OF refunds_partitioned
 -- Payments indexes
 CREATE INDEX idx_payments_partitioned_user_id_created ON payments_partitioned(user_id, created_at DESC);
 CREATE INDEX idx_payments_partitioned_status_created ON payments_partitioned(status, created_at DESC);
-CREATE INDEX idx_payments_partitioned_payment_method_id ON payments_partitioned(payment_method_id) WHERE payment_method_id IS NOT NULL;
+CREATE INDEX idx_payments_partitioned_metadata ON payments_partitioned USING GIN(metadata);
 CREATE INDEX idx_payments_partitioned_idempotency_key ON payments_partitioned(idempotency_key) WHERE idempotency_key IS NOT NULL;
 
 -- Refunds indexes

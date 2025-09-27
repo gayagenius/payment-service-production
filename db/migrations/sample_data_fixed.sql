@@ -1,80 +1,59 @@
 -- Migration 003: Sample Data for Testing (Fixed)
 -- This migration adds sample data for development and testing purposes
 
--- =============================================
--- SAMPLE PAYMENT METHOD TYPES
--- =============================================
-
-INSERT INTO payment_method_types (id, code, name, description, is_active, requires_brand, requires_last4, icon_url) VALUES
-(
-    '550e8400-e29b-41d4-a716-446655440010',
-    'CARD',
-    'Credit/Debit Card',
-    'Credit and debit cards including Visa, Mastercard, American Express',
-    true,
-    true,
-    true,
-    '/icons/card.svg'
-),
-(
-    '550e8400-e29b-41d4-a716-446655440011',
-    'WALLET',
-    'Digital Wallet',
-    'Digital wallets like Apple Pay, Google Pay, PayPal',
-    true,
-    false,
-    false,
-    '/icons/wallet.svg'
-),
-(
-    '550e8400-e29b-41d4-a716-446655440012',
-    'BANK_TRANSFER',
-    'Bank Transfer',
-    'Direct bank transfers and ACH payments',
-    true,
-    false,
-    false,
-    '/icons/bank.svg'
-);
+-- Payment method sample data removed - payment methods are now handled by the gateway directly
 
 -- =============================================
--- SAMPLE USER PAYMENT METHODS
+-- SAMPLE ORDERS
 -- =============================================
 
-INSERT INTO user_payment_methods (id, user_id, payment_method_type_id, brand, last4, details_encrypted, is_default) VALUES
+INSERT INTO orders (id, user_id, order_number, total_amount, currency, status) VALUES
 (
-    '550e8400-e29b-41d4-a716-446655440001',
+    '550e8400-e29b-41d4-a716-446655440200',
     '550e8400-e29b-41d4-a716-446655440000',
-    '550e8400-e29b-41d4-a716-446655440010',
-    'VISA',
-    '4242',
-    'encrypted_card_details_here',
-    true
+    'ORD-2024-001',
+    2500,
+    'KES',
+    'COMPLETED'
 ),
 (
-    '550e8400-e29b-41d4-a716-446655440002',
+    '550e8400-e29b-41d4-a716-446655440201',
     '550e8400-e29b-41d4-a716-446655440000',
-    '550e8400-e29b-41d4-a716-446655440011',
-    'APPLE_PAY',
-    null,
-    'encrypted_wallet_details_here',
-    false
+    'ORD-2024-002',
+    1000,
+    'KES',
+    'COMPLETED'
 ),
 (
-    '550e8400-e29b-41d4-a716-446655440003',
-    '550e8400-e29b-41d4-a716-446655440001',
-    '550e8400-e29b-41d4-a716-446655440010',
-    'MASTERCARD',
-    '5555',
-    'encrypted_card_details_here',
-    true
+    '550e8400-e29b-41d4-a716-446655440202',
+    '550e8400-e29b-41d4-a716-446655440000',
+    'ORD-2024-003',
+    5000,
+    'EUR',
+    'CANCELLED'
+),
+(
+    '550e8400-e29b-41d4-a716-446655440203',
+    '550e8400-e29b-41d4-a716-446655440100',
+    'ORD-2024-004',
+    1500,
+    'KES',
+    'COMPLETED'
+),
+(
+    '550e8400-e29b-41d4-a716-446655440204',
+    '550e8400-e29b-41d4-a716-446655440000',
+    'ORD-2024-005',
+    750,
+    'KES',
+    'PENDING'
 );
 
 -- =============================================
 -- SAMPLE PAYMENTS
 -- =============================================
 
-INSERT INTO payments (id, user_id, order_id, amount, currency, status, payment_method_id, gateway_response, idempotency_key) VALUES
+INSERT INTO payments (id, user_id, order_id, amount, currency, status, gateway_response, idempotency_key) VALUES
 (
     '550e8400-e29b-41d4-a716-446655440101',
     '550e8400-e29b-41d4-a716-446655440000',
@@ -82,31 +61,48 @@ INSERT INTO payments (id, user_id, order_id, amount, currency, status, payment_m
     2500,
     'KES',
     'SUCCEEDED',
-    '550e8400-e29b-41d4-a716-446655440001',
-    '{"transaction_id": "txn_1234567890", "processor_response": "approved", "metadata": {"order": {"id": "ORD-2024-001", "description": "Premium subscription", "items": ["Premium Plan"], "totalItems": 1, "shippingAddress": "Nairobi, Kenya"}, "user": {"id": "550e8400-e29b-41d4-a716-446655440000", "email": "user@example.com", "name": "John Doe", "phone": "+254712345678"}}}',
-    'idem_001'
+    '{"transactionId": "txn_1234567890", "processorResponse": "approved", "authCode": "AUTH123"}',
+    'idem_payment_001'
 ),
 (
     '550e8400-e29b-41d4-a716-446655440102',
-    '550e8400-e29b-41d4-a716-446655440001',
+    '550e8400-e29b-41d4-a716-446655440000',
     'ORD-2024-002',
-    1500,
-    'USD',
-    'PENDING',
-    '550e8400-e29b-41d4-a716-446655440003',
-    '{"transaction_id": "txn_0987654321", "processor_response": "pending", "metadata": {"order": {"id": "ORD-2024-002", "description": "Digital product", "items": ["E-book"], "totalItems": 1, "shippingAddress": "Digital Delivery"}, "user": {"id": "550e8400-e29b-41d4-a716-446655440001", "email": "jane@example.com", "name": "Jane Smith", "phone": "+1234567890"}}}',
-    'idem_002'
+    1000,
+    'KES',
+    'SUCCEEDED',
+    '{"transactionId": "txn_1234567891", "processorResponse": "approved", "authCode": "AUTH124"}',
+    'idem_payment_002'
 ),
 (
     '550e8400-e29b-41d4-a716-446655440103',
     '550e8400-e29b-41d4-a716-446655440000',
     'ORD-2024-003',
-    3000,
+    5000,
     'EUR',
     'FAILED',
-    '550e8400-e29b-41d4-a716-446655440001',
-    '{"transaction_id": "txn_1122334455", "processor_response": "declined", "error_code": "insufficient_funds", "metadata": {"order": {"id": "ORD-2024-003", "description": "Failed payment test", "items": ["Test Item"], "totalItems": 1, "shippingAddress": "Test Address"}, "user": {"id": "550e8400-e29b-41d4-a716-446655440000", "email": "user@example.com", "name": "John Doe", "phone": "+254712345678"}}}',
-    'idem_003'
+    '{"transactionId": "txn_1234567892", "processorResponse": "declined", "declineReason": "insufficient_funds"}',
+    'idem_payment_003'
+),
+(
+    '550e8400-e29b-41d4-a716-446655440104',
+    '550e8400-e29b-41d4-a716-446655440100',
+    'ORD-2024-004',
+    1500,
+    'KES',
+    'SUCCEEDED',
+    '{"transactionId": "txn_1234567893", "processorResponse": "approved", "authCode": "AUTH125"}',
+    'idem_payment_004'
+),
+(
+    '550e8400-e29b-41d4-a716-446655440105',
+    '550e8400-e29b-41d4-a716-446655440000',
+    'ORD-2024-005',
+    750,
+    'KES',
+    'PENDING',
+    '{}',
+    'idem_payment_005'
 );
 
 -- =============================================
@@ -120,54 +116,67 @@ INSERT INTO refunds (id, payment_id, amount, currency, status, reason, idempoten
     1000,
     'KES',
     'SUCCEEDED',
-    'Customer requested partial refund',
-    'refund_001'
+    'Customer requested partial refund for defective item',
+    'idem_refund_001'
 ),
 (
     '550e8400-e29b-41d4-a716-446655440202',
     '550e8400-e29b-41d4-a716-446655440102',
-    1500,
-    'USD',
-    'PENDING',
-    'Processing refund request',
-    'refund_002'
+    1000,
+    'KES',
+    'SUCCEEDED',
+    'Customer requested full refund',
+    'idem_refund_002'
 );
 
 -- =============================================
--- SAMPLE PAYMENT HISTORY (Auto-generated by triggers)
+-- SAMPLE PAYMENT HISTORY
 -- =============================================
 
--- Payment history entries are automatically created by triggers when payment status changes
--- These are just examples of what the history table will contain
-
-INSERT INTO payment_history (id, payment_id, status, previous_status, changed_by, change_reason, metadata) VALUES
+INSERT INTO payment_history (id, payment_id, status, changed_by, created_at, updated_at, metadata) VALUES
 (
     '550e8400-e29b-41d4-a716-446655440301',
     '550e8400-e29b-41d4-a716-446655440101',
-    'SUCCEEDED',
     'PENDING',
-    null,
-    'Payment processed successfully',
-    '{"old_status": "PENDING", "new_status": "SUCCEEDED", "updated_at": "2024-01-15T10:30:00Z", "payment_details": {"user_id": "550e8400-e29b-41d4-a716-446655440000", "order_id": "ORD-2024-001", "amount": 2500, "currency": "KES", "payment_method_id": "550e8400-e29b-41d4-a716-446655440001", "idempotency_key": "idem_001"}, "order_details": {"id": "ORD-2024-001", "description": "Premium subscription", "items": ["Premium Plan"], "totalItems": 1, "shippingAddress": "Nairobi, Kenya"}, "user_details": {"id": "550e8400-e29b-41d4-a716-446655440000", "email": "user@example.com", "name": "John Doe", "phone": "+254712345678"}}'
+    'system',
+    '2024-01-15T10:00:00Z',
+    '2024-01-15T10:00:00Z',
+    '{"old_status": null, "new_status": "PENDING", "updated_at": "2024-01-15T10:00:00Z", "payment_details": {"user_id": "550e8400-e29b-41d4-a716-446655440000", "order_id": "ORD-2024-001", "amount": 2500, "currency": "KES", "idempotency_key": "idem_001"}, "order_details": {"id": "ORD-2024-001", "description": "Premium subscription", "items": ["Premium Plan"], "totalItems": 1, "shippingAddress": "Nairobi, Kenya"}, "user_details": {"id": "550e8400-e29b-41d4-a716-446655440000", "email": "user@example.com", "name": "John Doe", "phone": "+254712345678"}}'
 ),
 (
     '550e8400-e29b-41d4-a716-446655440302',
+    '550e8400-e29b-41d4-a716-446655440101',
+    'SUCCEEDED',
+    'system',
+    '2024-01-15T10:30:00Z',
+    '2024-01-15T10:30:00Z',
+    '{"old_status": "PENDING", "new_status": "SUCCEEDED", "updated_at": "2024-01-15T10:30:00Z", "payment_details": {"user_id": "550e8400-e29b-41d4-a716-446655440000", "order_id": "ORD-2024-001", "amount": 2500, "currency": "KES", "idempotency_key": "idem_001"}, "order_details": {"id": "ORD-2024-001", "description": "Premium subscription", "items": ["Premium Plan"], "totalItems": 1, "shippingAddress": "Nairobi, Kenya"}, "user_details": {"id": "550e8400-e29b-41d4-a716-446655440000", "email": "user@example.com", "name": "John Doe", "phone": "+254712345678"}}'
+),
+(
+    '550e8400-e29b-41d4-a716-446655440303',
+    '550e8400-e29b-41d4-a716-446655440103',
+    'PENDING',
+    'system',
+    '2024-01-15T10:45:00Z',
+    '2024-01-15T10:45:00Z',
+    '{"old_status": null, "new_status": "PENDING", "updated_at": "2024-01-15T10:45:00Z", "payment_details": {"user_id": "550e8400-e29b-41d4-a716-446655440000", "order_id": "ORD-2024-003", "amount": 3000, "currency": "EUR", "idempotency_key": "idem_003"}, "order_details": {"id": "ORD-2024-003", "description": "Failed payment test", "items": ["Test Item"], "totalItems": 1, "shippingAddress": "Test Address"}, "user_details": {"id": "550e8400-e29b-41d4-a716-446655440000", "email": "user@example.com", "name": "John Doe", "phone": "+254712345678"}}'
+),
+(
+    '550e8400-e29b-41d4-a716-446655440304',
     '550e8400-e29b-41d4-a716-446655440103',
     'FAILED',
-    'PENDING',
-    null,
-    'Payment failed due to insufficient funds',
-    '{"old_status": "PENDING", "new_status": "FAILED", "updated_at": "2024-01-15T11:00:00Z", "payment_details": {"user_id": "550e8400-e29b-41d4-a716-446655440000", "order_id": "ORD-2024-003", "amount": 3000, "currency": "EUR", "payment_method_id": "550e8400-e29b-41d4-a716-446655440001", "idempotency_key": "idem_003"}, "order_details": {"id": "ORD-2024-003", "description": "Failed payment test", "items": ["Test Item"], "totalItems": 1, "shippingAddress": "Test Address"}, "user_details": {"id": "550e8400-e29b-41d4-a716-446655440000", "email": "user@example.com", "name": "John Doe", "phone": "+254712345678"}}'
+    'system',
+    '2024-01-15T11:00:00Z',
+    '2024-01-15T11:00:00Z',
+    '{"old_status": "PENDING", "new_status": "FAILED", "updated_at": "2024-01-15T11:00:00Z", "payment_details": {"user_id": "550e8400-e29b-41d4-a716-446655440000", "order_id": "ORD-2024-003", "amount": 3000, "currency": "EUR", "idempotency_key": "idem_003"}, "order_details": {"id": "ORD-2024-003", "description": "Failed payment test", "items": ["Test Item"], "totalItems": 1, "shippingAddress": "Test Address"}, "user_details": {"id": "550e8400-e29b-41d4-a716-446655440000", "email": "user@example.com", "name": "John Doe", "phone": "+254712345678"}}'
 );
 
 -- =============================================
 -- VERIFICATION QUERIES
 -- =============================================
 
--- Verify data was inserted correctly
-SELECT 'Payment Method Types' as table_name, COUNT(*) as count FROM payment_method_types
-UNION ALL
-SELECT 'User Payment Methods', COUNT(*) FROM user_payment_methods
+-- Check data counts
+SELECT 'Orders' as table_name, COUNT(*) as count FROM orders
 UNION ALL
 SELECT 'Payments', COUNT(*) FROM payments
 UNION ALL

@@ -10,7 +10,6 @@ import bodyParser from "body-parser";
 
 import payments from "../routes/payments-integrated.js"; 
 import refunds from "../routes/refunds.js";
-import methods from "../routes/methods.js";
 import paymentHistory from "../routes/paymentHistory.js";
 import webhooks from "../routes/webhooks.js";
 import queueHealthRouter from "../routes/queueHealth.js";
@@ -73,9 +72,6 @@ app.use((req, res, next) => {
 // --------------------
 app.use("/payments", payments);
 app.use("/refunds", refunds);
-app.use("/methods", methods);
-app.use("/payments/methods", methods);
-app.use("/payment", methods);
 app.use("/payment-history", paymentHistory);
 app.use("/webhooks", webhooks);
 app.use("/queue", queueHealthRouter);

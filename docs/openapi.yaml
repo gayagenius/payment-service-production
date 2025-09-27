@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Payment Service API
   description: |
-    A payment gateway service that handles payments, refunds, and payment methods.
+    A payment gateway service that handles payments and refunds.
     This service provides a simulation mode for testing payment flows without real payment processors.
     
     ## Authentication
@@ -66,7 +66,6 @@ paths:
                 value:
                   amount: 2500
                   currency: "KES"
-                  paymentMethodId: "550e8400-e29b-41d4-a716-446655440000"
                   retry: false
                   metadata:
                     order:
@@ -81,15 +80,10 @@ paths:
                       name: "John Doe"
                       phone: "+254712345678"
               one_time_payment:
-                summary: One-time payment method
+                summary: One-time payment example
                 value:
                   amount: 1000
                   currency: "EUR"
-                  paymentMethod:
-                    type: "CARD"
-                    token: "tok_1234567890abcdef"
-                    brand: "VISA"
-                    last4: "4242"
                   retry: false
                   metadata:
                     order:
@@ -108,7 +102,6 @@ paths:
                 value:
                   amount: 2500
                   currency: "KES"
-                  paymentMethodId: "550e8400-e29b-41d4-a716-446655440000"
                   retry: true
                   idempotencyKey: "payment-user123-order456-1234567890"
                   metadata:
@@ -146,7 +139,6 @@ paths:
                       amount: 2500
                       currency: "KES"
                       status: "SUCCEEDED"
-                      paymentMethodId: "550e8400-e29b-41d4-a716-446655440000"
                       gatewayResponse:
                         transactionId: "txn_1234567890"
                         processorResponse: "approved"
@@ -390,7 +382,6 @@ paths:
                         amount: 2500
                         currency: "KES"
                         status: "SUCCEEDED"
-                        paymentMethodId: "550e8400-e29b-41d4-a716-446655440000"
                         createdAt: "2024-01-15T10:30:00Z"
                         updatedAt: "2024-01-15T10:30:00Z"
                     nextCursor: "eyJjcmVhdGVkQXQiOiIyMDI0LTAxLTE0VDEwOjMwOjAwWiIsImlkIjoiNTUwZTg0MDAtZTI5Yi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIn0="
@@ -399,247 +390,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalError'
-
-  /payment/types:
-    get:
-      summary: Get available payment method types
-      description: |
-        Retrieve all available payment method types that can be used for payments.
-        This endpoint returns the master catalog of supported payment methods with their
-        configuration details including required fields and validation rules.
-      operationId: getPaymentMethodTypes
-      tags:
-        - Payments
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: active
-          in: query
-          description: Filter by active status (true/false). Defaults to true if not specified.
-          required: false
-          schema:
-            type: boolean
-            default: true
-        - name: sort
-          in: query
-          description: Sort order for results
-          required: false
-          schema:
-            type: string
-            enum: [name, code]
-            default: name
-        - name: limit
-          in: query
-          description: Maximum number of payment types to return
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 50
-        - name: cursor
-          in: query
-          description: Cursor for pagination (use the id from the last item in previous response)
-          required: false
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Payment method types retrieved successfully
-          headers:
-            X-Total-Count:
-              description: Total number of payment method types available
-              schema:
-                type: integer
-                example: 3
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/PaymentMethodType'
-                  pagination:
-                    $ref: '#/components/schemas/PaginationInfo'
-              examples:
-                all_types:
-                  summary: All active payment method types
-                  value:
-                    data:
-                      - id: "550e8400-e29b-41d4-a716-446655440010"
-                        code: "CARD"
-                        name: "Credit/Debit Card"
-                        description: "Credit and debit cards including Visa, Mastercard, American Express"
-                        isActive: true
-                        requiresBrand: true
-                        requiresLast4: true
-                        iconUrl: "/icons/card.svg"
-                        sortOrder: 1
-                        createdAt: "2024-01-01T00:00:00Z"
-                        updatedAt: "2024-01-01T00:00:00Z"
-                      - id: "550e8400-e29b-41d4-a716-446655440011"
-                        code: "WALLET"
-                        name: "Digital Wallet"
-                        description: "Digital wallets like Apple Pay, Google Pay, PayPal"
-                        isActive: true
-                        requiresBrand: false
-                        requiresLast4: false
-                        iconUrl: "/icons/wallet.svg"
-                        sortOrder: 2
-                        createdAt: "2024-01-01T00:00:00Z"
-                        updatedAt: "2024-01-01T00:00:00Z"
-                      - id: "550e8400-e29b-41d4-a716-446655440012"
-                        code: "BANK_TRANSFER"
-                        name: "Bank Transfer"
-                        description: "Direct bank transfers and ACH payments"
-                        isActive: true
-                        requiresBrand: false
-                        requiresLast4: false
-                        iconUrl: "/icons/bank.svg"
-                        sortOrder: 3
-                        createdAt: "2024-01-01T00:00:00Z"
-                        updatedAt: "2024-01-01T00:00:00Z"
-                    pagination:
-                      total: 3
-                      limit: 50
-                      cursor: null
-                      hasMore: false
-                inactive_types:
-                  summary: Inactive payment method types
-                  value:
-                    data:
-                      - id: "550e8400-e29b-41d4-a716-446655440013"
-                        code: "CRYPTO"
-                        name: "Cryptocurrency"
-                        description: "Bitcoin, Ethereum and other cryptocurrencies"
-                        isActive: false
-                        requiresBrand: false
-                        requiresLast4: false
-                        iconUrl: "/icons/crypto.svg"
-                        sortOrder: 4
-                        createdAt: "2024-01-01T00:00:00Z"
-                        updatedAt: "2024-01-01T00:00:00Z"
-                    pagination:
-                      total: 1
-                      limit: 50
-                      cursor: null
-                      hasMore: false
-        '400':
-          description: Bad request - invalid query parameters
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Problem'
-              examples:
-                invalid_sort:
-                  summary: Invalid sort parameter
-                  value:
-                    status: "BAD_REQUEST"
-                    title: "Invalid sort parameter"
-                    detail: "Sort parameter must be one of: name, code"
-                    instance: "/payments/types?sort=invalid"
-                invalid_limit:
-                  summary: Invalid limit parameter
-                  value:
-                    status: "BAD_REQUEST"
-                    title: "Invalid limit parameter"
-                    detail: "Limit must be between 1 and 100"
-                    instance: "/payments/types?limit=200"
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '429':
-          $ref: '#/components/responses/RateLimited'
-        '500':
-          $ref: '#/components/responses/InternalError'
-
-  /payments/methods:
-    post:
-      summary: Add a payment method
-      description: Add a new payment method for a user
-      operationId: addPaymentMethod
-      tags:
-        - Payments
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PaymentMethodCreateRequest'
-            examples:
-              card_method:
-                summary: Add card payment method
-                value:
-                  userId: "550e8400-e29b-41d4-a716-446655440000"
-                  type: "CARD"
-                  details:
-                    token: "tok_1234567890abcdef"
-                    brand: "VISA"
-                    last4: "4242"
-                  isDefault: true
-              wallet_method:
-                summary: Add wallet payment method
-                value:
-                  userId: "550e8400-e29b-41d4-a716-446655440000"
-                  type: "WALLET"
-                  details:
-                    token: "wallet_1234567890abcdef"
-                    provider: "PayPal"
-                  isDefault: false
-      responses:
-        '201':
-          description: Payment method added successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaymentMethod'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/ValidationError'
-        '500':
-          $ref: '#/components/responses/InternalError'
-
-  /payments/methods/{userId}:
-    get:
-      summary: List payment methods for a user
-      description: Retrieve all payment methods for a specific user
-      operationId: listPaymentMethods
-      tags:
-        - Payments
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: userId
-          in: path
-          required: true
-          description: User ID
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Payment methods retrieved successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  methods:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/PaymentMethod'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '500':
-          $ref: '#/components/responses/InternalError'
-
   /payment-history/{payment_id}:
     get:
       summary: Get payment history for a specific payment
@@ -939,13 +689,6 @@ components:
           description: ISO 4217 currency code
           pattern: '^[A-Z]{3}$'
           example: "KES"
-        paymentMethodId:
-          type: string
-          format: uuid
-          description: ID of existing payment method
-          example: "550e8400-e29b-41d4-a716-446655440000"
-        paymentMethod:
-          $ref: '#/components/schemas/PaymentMethodDetails'
         orderId:
           type: string
           description: Associated order ID
@@ -963,29 +706,7 @@ components:
           default: false
           example: false
 
-    PaymentMethodDetails:
-      type: object
-      required:
-        - type
-        - token
-      properties:
-        type:
-          type: string
-          enum: [CARD, WALLET, BANK_TRANSFER]
-          description: Payment method type
-        token:
-          type: string
-          description: Tokenized payment method reference (never raw PAN)
-          example: "tok_1234567890abcdef"
-        brand:
-          type: string
-          description: Card brand (for CARD type)
-          example: "VISA"
-        last4:
-          type: string
-          description: Last 4 digits of card number
-          pattern: '^[0-9]{4}$'
-          example: "4242"
+    # Payment methods are handled by the payment gateway (Paystack)
 
     Payment:
       type: object
@@ -1018,12 +739,6 @@ components:
           enum: [PENDING, AUTHORIZED, SUCCEEDED, FAILED, REFUNDED, PARTIALLY_REFUNDED, CANCELLED]
           description: Payment status
           example: "SUCCEEDED"
-        paymentMethodId:
-          type: string
-          format: uuid
-          nullable: true
-          description: Payment method used
-          example: "550e8400-e29b-41d4-a716-446655440000"
         gatewayResponse:
           type: object
           description: Gateway response data (masked, no PAN)
@@ -1075,24 +790,8 @@ components:
           format: uuid
           description: Unique refund identifier
           example: "550e8400-e29b-41d4-a716-446655440002"
-    PaymentMethod:
-      type: object
-      properties:
-        id:
+        payment_id:
           type: string
-          format: uuid
-          description: Payment method identifier
-
-        userId:
-          type: string
-          format: uuid
-          description: User who owns this payment method
-          example: "550e8400-e29b-41d4-a716-446655440000"
-
-        type:
-          type: string
-          description: Payment method type
-
           format: uuid
           description: Original payment ID
           example: "550e8400-e29b-41d4-a716-446655440001"
@@ -1129,150 +828,6 @@ components:
           format: date-time
           description: Last update timestamp
           example: "2024-01-15T11:00:00Z"
-
-    PaymentMethodCreateRequest:
-      type: object
-      required:
-        - userId
-        - type
-        - details
-      properties:
-        userId:
-          type: string
-          format: uuid
-          description: User ID
-          example: "550e8400-e29b-41d4-a716-446655440000"
-        type:
-          type: string
-          enum: [CARD, WALLET, BANK_TRANSFER]
-          description: Payment method type
-          example: "CARD"
-        details:
-          type: object
-          description: Encrypted payment method details
-          additionalProperties: true
-          example:
-            token: "tok_1234567890abcdef"
-            brand: "VISA"
-            last4: "4242"
-        isDefault:
-          type: boolean
-          description: Whether this is the default payment method
-          default: false
-          example: true
-
-    PaymentMethod:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Unique payment method identifier
-          example: "550e8400-e29b-41d4-a716-446655440000"
-        userId:
-          type: string
-          format: uuid
-          description: User ID
-          example: "550e8400-e29b-41d4-a716-446655440000"
-        type:
-          type: string
-          enum: [CARD, WALLET, BANK_TRANSFER]
-          description: Payment method type
-          example: "CARD"
-        brand:
-          type: string
-          nullable: true
-          description: Card brand
-          example: "VISA"
-        last4:
-          type: string
-          nullable: true
-          description: Last 4 digits of card number
-          example: "4242"
-        isDefault:
-          type: boolean
-          description: Whether this is the default payment method
-          example: true
-        createdAt:
-          type: string
-          format: date-time
-          description: Creation timestamp
-          example: "2024-01-15T09:00:00Z"
-        updatedAt:
-          type: string
-          format: date-time
-          description: Last update timestamp
-          example: "2024-01-15T09:00:00Z"
-
-    PaymentMethodType:
-      type: object
-      description: |
-        Payment method type definition from the master catalog. This represents
-        the configuration and requirements for a specific type of payment method.
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Unique payment method type identifier
-          example: "550e8400-e29b-41d4-a716-446655440010"
-        code:
-          type: string
-          description: Unique code for the payment method type
-          example: "CARD"
-          maxLength: 50
-        name:
-          type: string
-          description: Human-readable name of the payment method type
-          example: "Credit/Debit Card"
-          maxLength: 100
-        description:
-          type: string
-          nullable: true
-          description: Detailed description of the payment method type
-          example: "Credit and debit cards including Visa, Mastercard, American Express"
-        isActive:
-          type: boolean
-          description: Whether this payment method type is currently available
-          example: true
-        requiresBrand:
-          type: boolean
-          description: Whether this payment method type requires a brand field (e.g., VISA, MASTERCARD)
-          example: true
-        requiresLast4:
-          type: boolean
-          description: Whether this payment method type requires last 4 digits (typically for cards)
-          example: true
-        iconUrl:
-          type: string
-          nullable: true
-          description: URL to the icon representing this payment method type
-          example: "/icons/card.svg"
-          maxLength: 255
-        sortOrder:
-          type: integer
-          description: Sort order for displaying payment method types
-          example: 1
-          minimum: 0
-        createdAt:
-          type: string
-          format: date-time
-          description: Creation timestamp
-          example: "2024-01-01T00:00:00Z"
-        updatedAt:
-          type: string
-          format: date-time
-          description: Last update timestamp
-          example: "2024-01-01T00:00:00Z"
-      required:
-        - id
-        - code
-        - name
-        - isActive
-        - requiresBrand
-        - requiresLast4
-        - sortOrder
-        - createdAt
-        - updatedAt
 
     PaymentListResponse:
       type: object
@@ -1429,7 +984,6 @@ components:
               order_id: "order_123"
               amount: 2500
               currency: "KES"
-              payment_method_id: "550e8400-e29b-41d4-a716-446655440000"
               idempotency_key: "idem_1234567890"
             order_details:
               id: "order_123"
@@ -1533,13 +1087,11 @@ components:
                 details:
                   resourceType: "payment"
                   resourceId: "550e8400-e29b-41d4-a716-446655440001"
-            payment_method_not_found:
-              summary: Payment method not found
+              summary: Resource not found
               value:
                 status: "NOT_FOUND"
-                message: "Payment method not found"
+                message: "Resource not found"
                 details:
-                  resourceType: "payment_method"
                   resourceId: "550e8400-e29b-41d4-a716-446655440000"
             user_not_found:
               summary: User not found
@@ -1586,7 +1138,7 @@ components:
                 status: "VALIDATION_ERROR"
                 message: "Invalid UUID format"
                 details:
-                  field: "paymentMethodId"
+                  field: "resourceId"
                   value: "invalid-uuid"
                   constraint: "Must be a valid UUID v4 format"
             refund_amount_exceeds:
@@ -1691,4 +1243,4 @@ components:
 
 tags:
   - name: Payments
-    description: Payment processing operations including payments, refunds, and payment methods
+    description: Payment processing operations including payments and refunds

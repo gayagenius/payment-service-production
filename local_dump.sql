@@ -32,18 +32,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
 COMMENT ON EXTENSION "uuid-ossp" IS 'generate universally unique identifiers (UUIDs)';
 
 
---
--- Name: payment_method_type; Type: TYPE; Schema: public; Owner: postgres
---
-
-CREATE TYPE public.payment_method_type AS ENUM (
-    'CARD',
-    'WALLET',
-    'BANK_TRANSFER'
-);
-
-
-ALTER TYPE public.payment_method_type OWNER TO postgres;
+-- Payment method type enum removed - payment methods now handled by gateway
 
 --
 -- Name: payment_status; Type: TYPE; Schema: public; Owner: postgres
@@ -139,7 +128,7 @@ BEGIN
                     'order_id', NEW.order_id,
                     'amount', NEW.amount,
                     'currency', NEW.currency,
-                    'payment_method_id', NEW.payment_method_id,
+                    'metadata', NEW.metadata,
                     'idempotency_key', NEW.idempotency_key
                 ),
                 'order_details', COALESCE(NEW.gateway_response->'metadata'->'order', '{}'::jsonb),
@@ -216,31 +205,7 @@ CREATE TABLE public.payment_history (
 
 ALTER TABLE public.payment_history OWNER TO postgres;
 
---
--- Name: payment_method_types; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.payment_method_types (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    code character varying(50) NOT NULL,
-    name character varying(100) NOT NULL,
-    description text,
-    is_active boolean DEFAULT true NOT NULL,
-    requires_brand boolean DEFAULT false NOT NULL,
-    requires_last4 boolean DEFAULT false NOT NULL,
-    icon_url character varying(255),
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
-ALTER TABLE public.payment_method_types OWNER TO postgres;
-
---
--- Name: TABLE payment_method_types; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON TABLE public.payment_method_types IS 'Master catalog of supported payment method types';
+-- Payment method types table removed - payment methods now handled by gateway
 
 
 --
@@ -254,7 +219,7 @@ CREATE TABLE public.payments (
     amount integer NOT NULL,
     currency character(3) NOT NULL,
     status public.payment_status DEFAULT 'PENDING'::public.payment_status NOT NULL,
-    payment_method_id uuid,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     gateway_response jsonb DEFAULT '{}'::jsonb NOT NULL,
     idempotency_key character varying(255),
     created_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -343,7 +308,7 @@ CREATE VIEW public.payment_summary AS
     p.amount,
     p.currency,
     p.status,
-    p.payment_method_id,
+    p.metadata,
     p.created_at,
     p.updated_at,
     COALESCE(sum(r.amount), (0)::bigint) AS total_refunded,
@@ -354,45 +319,12 @@ CREATE VIEW public.payment_summary AS
         END AS refund_status
    FROM (public.payments p
      LEFT JOIN public.refunds r ON (((p.id = r.payment_id) AND (r.status = 'SUCCEEDED'::public.refund_status))))
-  GROUP BY p.id, p.user_id, p.order_id, p.amount, p.currency, p.status, p.payment_method_id, p.created_at, p.updated_at;
+  GROUP BY p.id, p.user_id, p.order_id, p.amount, p.currency, p.status, p.metadata, p.created_at, p.updated_at;
 
 
 ALTER TABLE public.payment_summary OWNER TO postgres;
 
---
--- Name: user_payment_methods; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.user_payment_methods (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    user_id uuid NOT NULL,
-    payment_method_type_id uuid NOT NULL,
-    brand character varying(50),
-    last4 character varying(4),
-    details_encrypted text NOT NULL,
-    is_default boolean DEFAULT false NOT NULL,
-    is_active boolean DEFAULT true NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT chk_user_payment_methods_brand CHECK (((brand IS NULL) OR (length(TRIM(BOTH FROM brand)) > 0))),
-    CONSTRAINT chk_user_payment_methods_last4 CHECK (((last4 IS NULL) OR ((last4)::text ~ '^[0-9]{4}$'::text)))
-);
-
-
-ALTER TABLE public.user_payment_methods OWNER TO postgres;
-
---
--- Name: TABLE user_payment_methods; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON TABLE public.user_payment_methods IS 'Stores encrypted payment method information for users';
-
-
---
--- Name: COLUMN user_payment_methods.details_encrypted; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN public.user_payment_methods.details_encrypted IS 'KMS-managed encrypted payment method details (never store raw PAN)';
+-- User payment methods table removed - payment methods now handled by gateway
 
 
 --
@@ -403,19 +335,14 @@ COPY public.payment_history (id, payment_id, status, previous_status, changed_by
 \.
 
 
---
--- Data for Name: payment_method_types; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.payment_method_types (id, code, name, description, is_active, requires_brand, requires_last4, icon_url, created_at, updated_at) FROM stdin;
-\.
+-- Payment method types data removed - table no longer exists
 
 
 --
 -- Data for Name: payments; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.payments (id, user_id, order_id, amount, currency, status, payment_method_id, gateway_response, idempotency_key, created_at, updated_at) FROM stdin;
+COPY public.payments (id, user_id, order_id, amount, currency, status, metadata, gateway_response, idempotency_key, created_at, updated_at) FROM stdin;
 \.
 
 
@@ -427,12 +354,7 @@ COPY public.refunds (id, payment_id, amount, currency, status, reason, idempoten
 \.
 
 
---
--- Data for Name: user_payment_methods; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.user_payment_methods (id, user_id, payment_method_type_id, brand, last4, details_encrypted, is_default, is_active, created_at, updated_at) FROM stdin;
-\.
+-- User payment methods data removed - table no longer exists
 
 
 --
@@ -443,20 +365,7 @@ ALTER TABLE ONLY public.payment_history
     ADD CONSTRAINT payment_history_pkey PRIMARY KEY (id);
 
 
---
--- Name: payment_method_types payment_method_types_code_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.payment_method_types
-    ADD CONSTRAINT payment_method_types_code_key UNIQUE (code);
-
-
---
--- Name: payment_method_types payment_method_types_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.payment_method_types
-    ADD CONSTRAINT payment_method_types_pkey PRIMARY KEY (id);
+-- Payment method types constraints removed - table no longer exists
 
 
 --
@@ -475,12 +384,7 @@ ALTER TABLE ONLY public.refunds
     ADD CONSTRAINT refunds_pkey PRIMARY KEY (id);
 
 
---
--- Name: user_payment_methods user_payment_methods_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.user_payment_methods
-    ADD CONSTRAINT user_payment_methods_pkey PRIMARY KEY (id);
+-- User payment methods constraints removed - table no longer exists
 
 
 --
@@ -504,18 +408,7 @@ CREATE INDEX idx_payment_history_payment_id_created ON public.payment_history US
 CREATE INDEX idx_payment_history_status ON public.payment_history USING btree (status);
 
 
---
--- Name: idx_payment_method_types_active; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_payment_method_types_active ON public.payment_method_types USING btree (is_active);
-
-
---
--- Name: idx_payment_method_types_code; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_payment_method_types_code ON public.payment_method_types USING btree (code);
+-- Payment method types indexes removed - table no longer exists
 
 
 --
@@ -525,11 +418,7 @@ CREATE INDEX idx_payment_method_types_code ON public.payment_method_types USING 
 CREATE UNIQUE INDEX idx_payments_idempotency_key ON public.payments USING btree (idempotency_key) WHERE (idempotency_key IS NOT NULL);
 
 
---
--- Name: idx_payments_payment_method_id; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_payments_payment_method_id ON public.payments USING btree (payment_method_id) WHERE (payment_method_id IS NOT NULL);
+-- Payment method ID index removed - column no longer exists
 
 
 --
@@ -567,32 +456,7 @@ CREATE INDEX idx_refunds_payment_id_created ON public.refunds USING btree (payme
 CREATE INDEX idx_refunds_status ON public.refunds USING btree (status);
 
 
---
--- Name: idx_user_payment_methods_active; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_user_payment_methods_active ON public.user_payment_methods USING btree (user_id, is_active, created_at DESC);
-
-
---
--- Name: idx_user_payment_methods_type_id; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_user_payment_methods_type_id ON public.user_payment_methods USING btree (payment_method_type_id);
-
-
---
--- Name: idx_user_payment_methods_user_default; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_user_payment_methods_user_default ON public.user_payment_methods USING btree (user_id, is_default DESC, created_at DESC);
-
-
---
--- Name: idx_user_payment_methods_user_id; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_user_payment_methods_user_id ON public.user_payment_methods USING btree (user_id);
+-- User payment methods indexes removed - table no longer exists
 
 
 --
@@ -602,11 +466,7 @@ CREATE INDEX idx_user_payment_methods_user_id ON public.user_payment_methods USI
 CREATE TRIGGER create_payment_history_trigger AFTER UPDATE ON public.payments FOR EACH ROW EXECUTE FUNCTION public.create_payment_history_entry();
 
 
---
--- Name: payment_method_types update_payment_method_types_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
---
-
-CREATE TRIGGER update_payment_method_types_updated_at BEFORE UPDATE ON public.payment_method_types FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+-- Payment method types trigger removed - table no longer exists
 
 
 --
@@ -623,11 +483,7 @@ CREATE TRIGGER update_payments_updated_at BEFORE UPDATE ON public.payments FOR E
 CREATE TRIGGER update_refunds_updated_at BEFORE UPDATE ON public.refunds FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
---
--- Name: user_payment_methods update_user_payment_methods_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
---
-
-CREATE TRIGGER update_user_payment_methods_updated_at BEFORE UPDATE ON public.user_payment_methods FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+-- User payment methods trigger removed - table no longer exists
 
 
 --
@@ -638,12 +494,7 @@ ALTER TABLE ONLY public.payment_history
     ADD CONSTRAINT payment_history_payment_id_fkey FOREIGN KEY (payment_id) REFERENCES public.payments(id);
 
 
---
--- Name: payments payments_payment_method_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.payments
-    ADD CONSTRAINT payments_payment_method_id_fkey FOREIGN KEY (payment_method_id) REFERENCES public.user_payment_methods(id);
+-- Payment method foreign key constraint removed - column no longer exists
 
 
 --
@@ -654,12 +505,7 @@ ALTER TABLE ONLY public.refunds
     ADD CONSTRAINT refunds_payment_id_fkey FOREIGN KEY (payment_id) REFERENCES public.payments(id);
 
 
---
--- Name: user_payment_methods user_payment_methods_payment_method_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.user_payment_methods
-    ADD CONSTRAINT user_payment_methods_payment_method_type_id_fkey FOREIGN KEY (payment_method_type_id) REFERENCES public.payment_method_types(id);
+-- User payment methods foreign key constraints removed - table no longer exists
 
 
 --

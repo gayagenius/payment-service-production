@@ -76,12 +76,12 @@ BEGIN
     )
     INSERT INTO payments_archive (
         id, user_id, order_id, amount, currency, status, 
-        payment_method_id, gateway_response, idempotency_key, 
+        metadata, gateway_response, idempotency_key, 
         created_at, updated_at
     )
     SELECT 
         id, user_id, order_id, amount, currency, status,
-        payment_method_id, gateway_response, idempotency_key,
+        metadata, gateway_response, idempotency_key,
         created_at, updated_at
     FROM payments_to_archive;
     
@@ -136,12 +136,12 @@ BEGIN
     )
     INSERT INTO payments_archive (
         id, user_id, order_id, amount, currency, status, 
-        payment_method_id, gateway_response, idempotency_key, 
+        metadata, gateway_response, idempotency_key, 
         created_at, updated_at
     )
     SELECT 
         id, user_id, order_id, amount, currency, status,
-        payment_method_id, gateway_response, idempotency_key,
+        metadata, gateway_response, idempotency_key,
         created_at, updated_at
     FROM payments_to_archive;
     
@@ -190,11 +190,11 @@ BEGIN
     -- Generate reports for payments older than 1 year
     INSERT INTO payment_reports (
         payment_id, user_id, order_id, amount, currency, status,
-        payment_method_id, gateway_response, created_at, updated_at
+        metadata, gateway_response, created_at, updated_at
     )
     SELECT 
         id, user_id, order_id, amount, currency, status,
-        payment_method_id, gateway_response, created_at, updated_at
+        metadata, gateway_response, created_at, updated_at
     FROM payments_partitioned 
     WHERE created_at < NOW() - INTERVAL '1 year'
     AND id NOT IN (SELECT payment_id FROM payment_reports);

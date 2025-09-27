@@ -14,23 +14,8 @@ router.get('/', async (req, res) => {
         const limitNum = Math.min(parseInt(limit) || API_CONFIG.DEFAULT_PAGINATION_LIMIT, API_CONFIG.MAX_PAGINATION_LIMIT);
         const offsetNum = Math.max(parseInt(offset) || API_CONFIG.DEFAULT_PAGINATION_OFFSET, 0);
 
-        const query = `
-            SELECT
-                id as payment_id,
-                user_id,
-                order_id,
-                amount,
-                currency,
-                status,
-                gateway_response,
-                idempotency_key,
-                metadata,
-                created_at,
-                updated_at
-            FROM payments
-            ORDER BY created_at DESC
-            LIMIT $1 OFFSET $2
-        `;
+        // Use archival lookup function to get payment history from both main and archived tables
+        const query = `SELECT * FROM get_payment_history_with_archive(NULL, NULL, $1, $2)`;
 
         const result = await dbPoolManager.executeRead(query, [limitNum, offsetNum]);
 
