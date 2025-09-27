@@ -12,7 +12,7 @@ const router = express.Router();
 router.post('/', async (req, res) => {
     try {
         const {
-            payment_id: payment_id,
+            payment_id,
             amount,
             reason,
             metadata = {},
@@ -107,11 +107,13 @@ router.post('/', async (req, res) => {
         // Generate idempotency key if not provided
         const finalIdempotencyKey = idempotencyKey || `refund_${payment_id}_${Date.now()}`;
 
-        // Create refund in database
+        // Create refund in database using direct SQL to avoid function conflicts
         const createRefundQuery = `
-            SELECT * FROM create_refund(
-                $1, $2, $3, $4, $5
-            )
+            INSERT INTO refunds (
+                payment_id, amount, currency, status, reason, idempotency_key
+            ) VALUES (
+                $1, $2, $3, 'PENDING', $4, $5
+            ) RETURNING id as refund_id, payment_id, amount, currency, status, reason, created_at
         `;
 
         const refundResult = await dbPoolManager.executeWrite(createRefundQuery, [
@@ -123,17 +125,6 @@ router.post('/', async (req, res) => {
         ]);
 
         const refund = refundResult.rows[0];
-
-        if (!refund.success) {
-            return res.status(400).json({
-                success: false,
-                error: {
-                    code: 'REFUND_CREATION_FAILED',
-                    message: 'Failed to create refund',
-                    details: refund.error_message
-                }
-            });
-        }
 
         // Process refund with gateway
         const refundData = {
@@ -161,7 +152,9 @@ router.post('/', async (req, res) => {
         // Update refund with gateway response
         if (gatewayResult.success) {
             const updateRefundQuery = `
-                SELECT * FROM update_refund_status($1, $2::refund_status)
+                UPDATE refunds 
+                SET status = $2, updated_at = NOW()
+                WHERE id = $1
             `;
             
             await dbPoolManager.executeWrite(updateRefundQuery, [
@@ -204,12 +197,13 @@ router.post('/', async (req, res) => {
         } else {
             // Update refund with failure status
             const updateRefundQuery = `
-                SELECT * FROM update_refund_status($1, $2::refund_status)
+                UPDATE refunds 
+                SET status = 'FAILED', updated_at = NOW()
+                WHERE id = $1
             `;
             
             await dbPoolManager.executeWrite(updateRefundQuery, [
-                refund.refund_id,
-                'FAILED'
+                refund.refund_id
             ]);
         }
 
