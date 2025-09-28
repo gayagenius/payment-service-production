@@ -12,7 +12,7 @@ erDiagram
 
     PAYMENTS {
         uuid id PK "DEFAULT uuid_generate_v4()"
-        uuid user_id FK "NOT NULL, REFERENCES USERS(id)"
+        varchar user_id FK "NOT NULL, REFERENCES USERS(id)"
         uuid order_id "NOT NULL"
         integer amount "NOT NULL, CHECK > 0"
         char currency "NOT NULL, CHECK pattern"
