@@ -9,7 +9,7 @@ ALTER TABLE refunds ADD COLUMN gateway_response JSONB NOT NULL DEFAULT '{}';
 
 -- Update the create_payment_with_history function to include metadata
 CREATE OR REPLACE FUNCTION create_payment_with_history(
-    p_user_id UUID,
+    p_user_id VARCHAR(255),
     p_order_id VARCHAR(255),
     p_amount INTEGER,
     p_currency CHAR(3),

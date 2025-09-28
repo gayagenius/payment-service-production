@@ -3,6 +3,7 @@ import dbPoolManager from '../db/connectionPool.js';
 import { API_CONFIG, PAYMENT_CONFIG, SECURITY_CONFIG } from '../config/constants.js';
 import { processPayment, createPaymentMethodForGateway, syncPaymentStatusWithPaystack } from '../services/paymentProcessor.js';
 import { publishPaymentEvent } from '../messaging/publishPaymentEvent.js';
+import { verifyToken, extractUserId, extractUserDetails } from '../services/userService.js';
 
 const router = express.Router();
 
@@ -105,7 +106,6 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     try {
         const {
-            userId: user_id,
             orderId: order_id,
             amount,
             currency = 'KES',
@@ -121,11 +121,11 @@ router.post('/', async (req, res) => {
                 error: {
                     code: 'VALIDATION_ERROR',
                     message: 'Missing required fields',
-                    details: 'userId, orderId, and amount are required'
+                    details: 'orderId and amount are required'
                 }
             });
         }
-        
+
         // Validate amount is a number
         if (typeof amount !== 'number') {
             return res.status(400).json({
@@ -188,12 +188,45 @@ router.post('/', async (req, res) => {
             });
         }
 
+        // Verify token with user service
+        console.log('Verifying token with user service...');
+        const tokenVerification = await verifyToken(authToken);
+        
+        if (!tokenVerification.success) {
+            console.error('Token verification failed:', tokenVerification.error);
+            return res.status(401).json({
+                success: false,
+                error: {
+                    code: 'NOT_AUTHORIZED',
+                    message: 'Not Authorized',
+                    details: tokenVerification.error
+                }
+            });
+        }
+
+        // Extract user details from token verification
+        const userDetails = extractUserDetails(tokenVerification);
+        const user_id = extractUserId(tokenVerification);
+        
+        if (!user_id) {
+            return res.status(401).json({
+                success: false,
+                error: {
+                    code: 'INVALID_USER_DATA',
+                    message: 'Invalid user data from token verification',
+                    details: 'User ID not found in token verification response'
+                }
+            });
+        }
+
+        console.log('Token verification successful for user:', user_id);
+
         // Validate retry logic
         if (retry === true) {
             if (!idempotencyKey) {
-                return res.status(400).json({
-                    success: false,
-                    error: {
+                    return res.status(400).json({
+                        success: false,
+                        error: {
                         code: 'RETRY_VALIDATION_ERROR',
                         message: 'Idempotency key required for retry',
                         details: 'idempotencyKey is required when retry is true'
@@ -397,21 +430,21 @@ router.post('/', async (req, res) => {
         // If not retrying or no existing payment found, create new payment
         if (!paymentResult) {
             const query = `
-                SELECT * FROM create_payment_working(
+                SELECT * FROM create_payment_with_history(
                     $1, $2, $3, $4, $5, $6, $7, $8
                 )
             `;
 
-            const result = await dbPoolManager.executeWrite(query, [
-                user_id,
-                order_id,
-                amount,
-                currency,
-                JSON.stringify({}), // gateway_response (will be updated after processing)
-                finalIdempotencyKey,
-                retry,
-                JSON.stringify(metadata) // metadata
-            ]);
+        const result = await dbPoolManager.executeWrite(query, [
+            user_id,
+            order_id,
+            amount,
+            currency,
+            JSON.stringify({}), // gateway_response (will be updated after processing)
+            finalIdempotencyKey,
+            retry,
+            JSON.stringify(metadata) // metadata
+        ]);
 
             paymentResult = result.rows[0];
         }
@@ -477,7 +510,8 @@ router.post('/', async (req, res) => {
                 ...metadata,
                 payment_id: paymentResult.payment_id,
                 order_id,
-                user_id
+                user_id,
+                user: userDetails // Include user details from token verification
             },
             idempotencyKey: finalIdempotencyKey
         };
@@ -611,16 +645,16 @@ router.post('/', async (req, res) => {
                     console.log(`Skipping gateway response update for duplicate reference error on payment ${paymentResult.payment_id}`);
                 } else {
                     // Regular failure handling
-                    const updateQuery = `
-                        UPDATE payments 
-                        SET status = 'FAILED', gateway_response = $1, updated_at = NOW()
-                        WHERE id = $2
-                    `;
-                    
-                    await dbPoolManager.executeWrite(updateQuery, [
-                        JSON.stringify(gatewayResult.error),
-                        paymentResult.payment_id
-                    ]);
+            const updateQuery = `
+                UPDATE payments 
+                SET status = 'FAILED', gateway_response = $1, updated_at = NOW()
+                WHERE id = $2
+            `;
+            
+            await dbPoolManager.executeWrite(updateQuery, [
+                JSON.stringify(gatewayResult.error),
+                paymentResult.payment_id
+            ]);
                 }
             }
         }
@@ -746,7 +780,7 @@ router.get('/:id', async (req, res) => {
         const query = `SELECT * FROM get_payment_with_archive($1)`;
 
         const result = await dbPoolManager.executeRead(query, [id]);
-        
+
         if (result.rows.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -802,14 +836,14 @@ router.get('/user/:userId', async (req, res) => {
         const { userId } = req.params;
         const { limit = 20, offset = 0, status } = req.query;
 
-        // Validate UUID format
-        if (!SECURITY_CONFIG.UUID_PATTERN.test(userId)) {
+        // Validate user ID format (any non-empty string is valid now)
+        if (!userId || userId.trim().length === 0) {
             return res.status(400).json({
                 success: false,
                 error: {
-                    code: 'INVALID_UUID',
+                    code: 'INVALID_USER_ID',
                     message: 'Invalid user ID format',
-                    details: 'User ID must be a valid UUID'
+                    details: 'User ID must be a non-empty string'
                 }
             });
         }

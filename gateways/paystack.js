@@ -334,7 +334,7 @@ export const processRefund = async (refundData) => {
                         },
                         body: JSON.stringify({
                             transaction: transactionId,
-                            amount: amount,
+                            amount: amount * 100,
                             reason: reason || 'Customer requested refund'
                         })
                     });

@@ -24,11 +24,51 @@ CREATE TYPE refund_status AS ENUM (
     'FAILED'
 );
 
--- Payment method types removed - handled by payment gateway
+CREATE TYPE payment_method_type AS ENUM (
+    'CARD',
+    'WALLET',
+    'BANK_TRANSFER'
+);
 
--- Payment method types table removed - handled by payment gateway
+-- =============================================
+-- PAYMENT METHOD TYPES TABLE (Master Catalog)
+-- =============================================
+CREATE TABLE payment_method_types (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    code VARCHAR(50) NOT NULL UNIQUE, -- e.g., 'CARD', 'WALLET', 'BANK_TRANSFER'
+    name VARCHAR(100) NOT NULL, -- e.g., 'Credit/Debit Card', 'Digital Wallet', 'Bank Transfer'
+    description TEXT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    requires_brand BOOLEAN NOT NULL DEFAULT false, -- e.g., CARD requires brand (VISA, MASTERCARD)
+    requires_last4 BOOLEAN NOT NULL DEFAULT false, -- e.g., CARD requires last4 digits
+    icon_url VARCHAR(255) NULL, -- URL to payment method icon
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
--- User payment methods table removed - handled by payment gateway
+-- =============================================
+-- USER PAYMENT METHODS TABLE (User's Saved Methods)
+-- =============================================
+CREATE TABLE user_payment_methods (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id VARCHAR(255) NOT NULL,
+    payment_method_type_id UUID NOT NULL REFERENCES payment_method_types(id),
+    brand VARCHAR(50) NULL, -- e.g., VISA, MASTERCARD
+    last4 VARCHAR(4) NULL, -- last 4 digits of card number
+    details_encrypted TEXT NOT NULL, -- KMS-managed encrypted details
+    is_default BOOLEAN NOT NULL DEFAULT false,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    -- Constraints
+    CONSTRAINT chk_user_payment_methods_last4 CHECK (
+        last4 IS NULL OR (last4 ~ '^[0-9]{4}$')
+    ),
+    CONSTRAINT chk_user_payment_methods_brand CHECK (
+        brand IS NULL OR length(trim(brand)) > 0
+    )
+);
 
 -- =============================================
 -- PAYMENTS TABLE
@@ -40,6 +80,7 @@ CREATE TABLE payments (
     amount INTEGER NOT NULL,
     currency CHAR(3) NOT NULL,
     status payment_status NOT NULL DEFAULT 'PENDING',
+    payment_method_id UUID NULL REFERENCES user_payment_methods(id),
     gateway_response JSONB NOT NULL DEFAULT '{}',
     idempotency_key VARCHAR(255) NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -113,12 +154,20 @@ WHERE idempotency_key IS NOT NULL;
 -- INDEXES FOR PERFORMANCE
 -- =============================================
 
--- Payment method indexes removed - handled by payment gateway
+-- Payment method type indexes
+CREATE INDEX idx_payment_method_types_code ON payment_method_types(code);
+CREATE INDEX idx_payment_method_types_active ON payment_method_types(is_active);
+
+-- User payment method indexes
+CREATE INDEX idx_user_payment_methods_user_id ON user_payment_methods(user_id);
+CREATE INDEX idx_user_payment_methods_user_default ON user_payment_methods(user_id, is_default DESC, created_at DESC);
+CREATE INDEX idx_user_payment_methods_type_id ON user_payment_methods(payment_method_type_id);
+CREATE INDEX idx_user_payment_methods_active ON user_payment_methods(user_id, is_active, created_at DESC);
 
 -- Payment indexes
 CREATE INDEX idx_payments_user_id_created ON payments(user_id, created_at DESC);
 CREATE INDEX idx_payments_status_created ON payments(status, created_at DESC);
--- Payment method index removed - handled by payment gateway
+CREATE INDEX idx_payments_payment_method_id ON payments(payment_method_id) WHERE payment_method_id IS NOT NULL;
 
 -- Payment history indexes
 CREATE INDEX idx_payment_history_payment_id_created ON payment_history(payment_id, created_at DESC);
@@ -144,7 +193,13 @@ $$ language 'plpgsql';
 
 -- Triggers for updated_at
 
--- Payment method triggers removed - handled by payment gateway
+CREATE TRIGGER update_payment_method_types_updated_at 
+    BEFORE UPDATE ON payment_method_types 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_user_payment_methods_updated_at 
+    BEFORE UPDATE ON user_payment_methods 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_payments_updated_at 
     BEFORE UPDATE ON payments 
@@ -178,6 +233,7 @@ BEGIN
                     'order_id', NEW.order_id,
                     'amount', NEW.amount,
                     'currency', NEW.currency,
+                    'payment_method_id', NEW.payment_method_id,
                     'idempotency_key', NEW.idempotency_key
                 ),
                 'order_details', COALESCE(NEW.gateway_response->'metadata'->'order', '{}'::jsonb),
@@ -211,6 +267,7 @@ SELECT
     p.amount,
     p.currency,
     p.status,
+    p.payment_method_id,
     p.created_at,
     p.updated_at,
     COALESCE(SUM(r.amount), 0) as total_refunded,
@@ -222,7 +279,7 @@ SELECT
 FROM payments p
 LEFT JOIN refunds r ON p.id = r.payment_id AND r.status = 'SUCCEEDED'
 GROUP BY p.id, p.user_id, p.order_id, p.amount, p.currency, 
-         p.status, p.created_at, p.updated_at;
+         p.status, p.payment_method_id, p.created_at, p.updated_at;
 
 -- =============================================
 -- FUNCTIONS FOR BUSINESS LOGIC
@@ -273,107 +330,13 @@ $$ LANGUAGE plpgsql;
 -- COMMENTS
 -- =============================================
 
--- Payment method table comments removed - handled by payment gateway
+COMMENT ON TABLE payment_method_types IS 'Master catalog of supported payment method types';
+COMMENT ON TABLE user_payment_methods IS 'Stores encrypted payment method information for users';
 COMMENT ON TABLE payments IS 'Main payments table storing all payment transactions';
 COMMENT ON TABLE refunds IS 'Stores refund information for payments';
 
--- Payment method column comments removed - handled by payment gateway
+COMMENT ON COLUMN user_payment_methods.details_encrypted IS 'KMS-managed encrypted payment method details (never store raw PAN)';
 COMMENT ON COLUMN payments.amount IS 'Amount in minor units (e.g., cents) to avoid floating point issues';
 COMMENT ON COLUMN payments.gateway_response IS 'Gateway response data (masked, no sensitive information)';
 COMMENT ON COLUMN payments.idempotency_key IS 'Unique key for idempotent payment requests';
 COMMENT ON COLUMN refunds.idempotency_key IS 'Unique key for idempotent refund requests';
-
--- =============================================
--- PAYMENT CREATION FUNCTION WITH HISTORY
--- =============================================
-
--- Create payment with automatic history entry
--- Supports retry functionality via idempotency key
-CREATE OR REPLACE FUNCTION create_payment_with_history(
-    p_user_id VARCHAR(255),
-    p_order_id VARCHAR(255),
-    p_amount INTEGER,
-    p_currency CHAR(3),
-    p_gateway_response JSONB DEFAULT '{}',
-    p_idempotency_key VARCHAR(255) DEFAULT NULL,
-    p_retry BOOLEAN DEFAULT FALSE,
-    p_metadata JSONB DEFAULT '{}'
-) RETURNS TABLE(
-    payment_id UUID,
-    status payment_status,
-    created_at TIMESTAMPTZ,
-    success BOOLEAN,
-    error_message TEXT
-) AS $$
-DECLARE
-    new_payment_id UUID;
-    payment_status payment_status := 'PENDING';
-    payment_created_at TIMESTAMPTZ;
-    error_msg TEXT;
-BEGIN
-    -- Validate input parameters
-    IF p_user_id IS NULL THEN
-        RETURN QUERY SELECT NULL::UUID, NULL::payment_status, NULL::TIMESTAMPTZ, FALSE, 'User ID is required'::TEXT;
-        RETURN;
-    END IF;
-    
-    IF p_order_id IS NULL OR length(trim(p_order_id)) = 0 THEN
-        RETURN QUERY SELECT NULL::UUID, NULL::payment_status, NULL::TIMESTAMPTZ, FALSE, 'Order ID is required'::TEXT;
-        RETURN;
-    END IF;
-    
-    IF p_amount IS NULL OR p_amount <= 0 THEN
-        RETURN QUERY SELECT NULL::UUID, NULL::payment_status, NULL::TIMESTAMPTZ, FALSE, 'Amount must be greater than 0'::TEXT;
-        RETURN;
-    END IF;
-    
-    IF p_currency IS NULL OR length(p_currency) != 3 THEN
-        RETURN QUERY SELECT NULL::UUID, NULL::payment_status, NULL::TIMESTAMPTZ, FALSE, 'Currency must be 3 characters'::TEXT;
-        RETURN;
-    END IF;
-    
-    -- Check for duplicate idempotency key with explicit alias
-    IF p_idempotency_key IS NOT NULL THEN
-        IF EXISTS (SELECT 1 FROM payments p WHERE p.idempotency_key = p_idempotency_key) THEN
-            -- Return existing payment with explicit alias
-            SELECT p.id, p.status, p.created_at INTO new_payment_id, payment_status, payment_created_at
-            FROM payments p
-            WHERE p.idempotency_key = p_idempotency_key;
-            
-            -- If retry is requested, return existing payment
-            IF p_retry THEN
-                RETURN QUERY SELECT new_payment_id, payment_status, payment_created_at, TRUE, 'Payment already exists'::TEXT;
-                RETURN;
-            ELSE
-                -- If not retry, return error
-                RETURN QUERY SELECT NULL::UUID, NULL::payment_status, NULL::TIMESTAMPTZ, FALSE, 'Payment already exists'::TEXT;
-                RETURN;
-            END IF;
-        END IF;
-    END IF;
-    
-    BEGIN
-        -- Insert payment
-        INSERT INTO payments (
-            user_id, order_id, amount, currency, status, 
-            gateway_response, idempotency_key, metadata
-        ) VALUES (
-            p_user_id, p_order_id, p_amount, p_currency, payment_status,
-            p_gateway_response, p_idempotency_key, p_metadata
-        ) RETURNING id, created_at INTO new_payment_id, payment_created_at;
-        
-        -- Insert payment history entry
-        INSERT INTO payment_history (
-            payment_id, status, metadata
-        ) VALUES (
-            new_payment_id, payment_status, p_metadata
-        );
-        
-        RETURN QUERY SELECT new_payment_id, payment_status, payment_created_at, TRUE, NULL::TEXT;
-        
-    EXCEPTION WHEN OTHERS THEN
-        error_msg := SQLERRM;
-        RETURN QUERY SELECT NULL::UUID, NULL::payment_status, NULL::TIMESTAMPTZ, FALSE, error_msg;
-    END;
-END;
-$$ LANGUAGE plpgsql;

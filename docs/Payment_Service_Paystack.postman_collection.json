@@ -46,7 +46,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"orderId\": \"order_card_001\",\n  \"amount\": 2500,\n  \"metadata\": {\n    \"user\": {\n      \"id\": \"{{user_id}}\",\n      \"email\": \"test@example.com\",\n      \"name\": \"Test User\"\n    },\n    \"order\": {\n      \"id\": \"order_card_001\",\n      \"description\": \"Card payment with Paystack\",\n      \"items\": [\"Premium Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"Premium subscription purchase\",\n    \"source\": \"web\"\n  },\n  \"retry\": false\n}"
+					"raw": "{\n  \"orderId\": \"order_card_001\",\n  \"amount\": 2500,\n  \"metadata\": {\n    \"order\": {\n      \"id\": \"order_card_001\",\n      \"description\": \"Card payment with Paystack\",\n      \"items\": [\"Premium Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"Premium subscription purchase\",\n    \"source\": \"web\"\n  },\n  \"retry\": false\n}"
 				},
 				"url": {
 					"raw": "{{base_url}}/payments",
@@ -83,7 +83,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"orderId\": \"order_bank_002\",\n  \"amount\": 5000,\n  \"metadata\": {\n    \"user\": {\n      \"id\": \"{{user_id}}\",\n      \"email\": \"bank@example.com\",\n      \"name\": \"Bank User\"\n    },\n    \"order\": {\n      \"id\": \"order_bank_002\",\n      \"description\": \"Bank transfer payment\",\n      \"items\": [\"Bank Transfer Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"Bank transfer subscription\",\n    \"source\": \"web\"\n  },\n  \"retry\": false\n}"
+					"raw": "{\n  \"orderId\": \"order_bank_002\",\n  \"amount\": 5000,\n  \"metadata\": {\n    \"order\": {\n      \"id\": \"order_bank_002\",\n      \"description\": \"Bank transfer payment\",\n      \"items\": [\"Bank Transfer Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"Bank transfer subscription\",\n    \"source\": \"web\"\n  },\n  \"retry\": false\n}"
 				},
 				"url": {
 					"raw": "{{base_url}}/payments",
@@ -120,7 +120,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"orderId\": \"order_ussd_003\",\n  \"amount\": 1000,\n  \"metadata\": {\n    \"user\": {\n      \"id\": \"{{user_id}}\",\n      \"email\": \"ussd@example.com\",\n      \"name\": \"USSD User\",\n      \"phone\": \"+254728287616\"\n    },\n    \"order\": {\n      \"id\": \"order_ussd_003\",\n      \"description\": \"USSD payment\",\n      \"items\": [\"USSD Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"USSD subscription\",\n    \"source\": \"web\"\n  },\n  \"retry\": false\n}"
+					"raw": "{\n  \"orderId\": \"order_ussd_003\",\n  \"amount\": 1000,\n  \"metadata\": {\n    \"order\": {\n      \"id\": \"order_ussd_003\",\n      \"description\": \"USSD payment\",\n      \"items\": [\"USSD Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"USSD subscription\",\n    \"source\": \"web\"\n  },\n  \"retry\": false\n}"
 				},
 				"url": {
 					"raw": "{{base_url}}/payments",
@@ -157,7 +157,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"orderId\": \"order_retry_004\",\n  \"amount\": 2500,\n  \"retry\": true,\n  \"idempotencyKey\": \"retry-{{$randomUUID}}\",\n  \"metadata\": {\n    \"user\": {\n      \"id\": \"{{user_id}}\",\n      \"email\": \"retry@example.com\",\n      \"name\": \"Retry User\"\n    },\n    \"order\": {\n      \"id\": \"order_retry_004\",\n      \"description\": \"Retry payment example\",\n      \"items\": [\"Retry Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"Retry payment for failed transaction\",\n    \"source\": \"web\"\n  }\n}"
+					"raw": "{\n  \"orderId\": \"order_retry_004\",\n  \"amount\": 2500,\n  \"retry\": true,\n  \"idempotencyKey\": \"retry-{{$randomUUID}}\",\n  \"metadata\": {\n    \"order\": {\n      \"id\": \"order_retry_004\",\n      \"description\": \"Retry payment example\",\n      \"items\": [\"Retry Plan\"],\n      \"totalItems\": 1\n    },\n    \"description\": \"Retry payment for failed transaction\",\n    \"source\": \"web\"\n  }\n}"
 				},
 				"url": {
 					"raw": "{{base_url}}/payments",

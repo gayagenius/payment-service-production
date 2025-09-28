@@ -74,7 +74,7 @@
 -- Payments table with partitioning
 CREATE TABLE payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
     order_id VARCHAR(255) NOT NULL,
     amount INTEGER NOT NULL,
     currency CHAR(3) NOT NULL DEFAULT 'KES',

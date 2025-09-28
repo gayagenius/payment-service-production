@@ -8,7 +8,7 @@
 -- Create partitioned payments table
 CREATE TABLE payments_partitioned (
     id UUID NOT NULL,
-    user_id UUID NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
     order_id VARCHAR(255) NOT NULL,
     amount INTEGER NOT NULL,
     currency CHAR(3) NOT NULL,

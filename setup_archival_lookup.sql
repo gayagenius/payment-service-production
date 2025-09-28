@@ -5,7 +5,7 @@
 CREATE OR REPLACE FUNCTION get_payment_with_archive(payment_id UUID)
 RETURNS TABLE (
     id UUID,
-    user_id UUID,
+    user_id VARCHAR(255),
     order_id VARCHAR(255),
     amount INTEGER,
     currency CHAR(3),
@@ -112,7 +112,7 @@ $$ LANGUAGE plpgsql;
 -- Function to get payment history with archival lookup
 CREATE OR REPLACE FUNCTION get_payment_history_with_archive(
     payment_id_param UUID DEFAULT NULL,
-    user_id_param UUID DEFAULT NULL,
+    user_id_param VARCHAR(255) DEFAULT NULL,
     limit_param INTEGER DEFAULT 100,
     offset_param INTEGER DEFAULT 0
 )
@@ -172,13 +172,13 @@ $$ LANGUAGE plpgsql;
 
 -- Function to get user payments with archival lookup
 CREATE OR REPLACE FUNCTION get_user_payments_with_archive(
-    user_id_param UUID,
+    user_id_param VARCHAR(255),
     limit_param INTEGER DEFAULT 100,
     offset_param INTEGER DEFAULT 0
 )
 RETURNS TABLE (
     id UUID,
-    user_id UUID,
+    user_id VARCHAR(255),
     order_id VARCHAR(255),
     amount INTEGER,
     currency CHAR(3),

@@ -10,7 +10,7 @@
 -- Create partitioned payments table (replaces existing)
 CREATE TABLE payments_partitioned (
     id UUID NOT NULL,
-    user_id UUID NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
     order_id VARCHAR(255) NOT NULL,
     amount INTEGER NOT NULL,
     currency CHAR(3) NOT NULL,
@@ -137,7 +137,7 @@ CREATE TABLE refunds_y2024m12 PARTITION OF refunds_partitioned
 -- Archive table for closed payments (performance archival)
 CREATE TABLE payments_archive (
     id UUID PRIMARY KEY,
-    user_id UUID NOT NULL,
+    user_id VAR NOT NULL,
     order_id VARCHAR(255) NOT NULL,
     amount INTEGER NOT NULL,
     currency CHAR(3) NOT NULL,
@@ -188,7 +188,7 @@ CREATE TABLE refunds_archive (
 CREATE TABLE payment_reports (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     payment_id UUID NOT NULL,
-    user_id UUID NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
     order_id VARCHAR(255) NOT NULL,
     amount INTEGER NOT NULL,
     currency CHAR(3) NOT NULL,

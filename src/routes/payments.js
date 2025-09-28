@@ -21,7 +21,6 @@ router.get('/', async (req, res) => {
             limit = API_CONFIG.DEFAULT_PAGINATION_LIMIT,
             offset = API_CONFIG.DEFAULT_PAGINATION_OFFSET,
             status,
-            user_id,
             start_date,
             end_date
         } = req.query;
@@ -99,7 +98,7 @@ router.get('/', async (req, res) => {
  * POST /payments - Create a new payment with retry support
  * 
  * Request Body:
- * - user_id: UUID of the user
+ * - user_id: String ID of the user
  * - order_id: Order identifier
  * - amount: Payment amount in minor units
  * - currency: Currency code (3 characters)
@@ -111,7 +110,6 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     try {
         const {
-            user_id,
             order_id,
             amount,
             currency,
@@ -122,15 +120,15 @@ router.post('/', async (req, res) => {
         } = req.body;
 
         // Validate required fields
-        if (!user_id || !order_id || !amount || !currency) {
+        if (!order_id || !amount || !currency) {
             return res.status(400).json({
                 success: false,
                 error: {
                     code: 'VALIDATION_ERROR',
                     message: 'Missing required fields',
-                    details: 'user_id, order_id, amount, and currency are required'
+                    details: 'order_id, amount, and currency are required'
                 }
-            });
+            }); 
         }
 
         // Validate amount

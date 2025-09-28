@@ -214,7 +214,7 @@ ALTER TABLE public.payment_history OWNER TO postgres;
 
 CREATE TABLE public.payments (
     id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    user_id uuid NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
     order_id character varying(255) NOT NULL,
     amount integer NOT NULL,
     currency character(3) NOT NULL,

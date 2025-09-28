@@ -33,7 +33,7 @@ CREATE TYPE refund_status AS ENUM (
 -- Payments
 CREATE TABLE payments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
     order_id VARCHAR(255) NOT NULL,
     amount INTEGER NOT NULL,
     currency CHAR(3) NOT NULL,
@@ -197,3 +197,98 @@ COMMENT ON COLUMN payments.amount IS 'Amount in minor units (e.g., cents for KES
 COMMENT ON COLUMN payments.gateway_response IS 'Gateway response data (masked, no sensitive information)';
 COMMENT ON COLUMN payments.idempotency_key IS 'Unique key for idempotent payment requests';
 COMMENT ON COLUMN refunds.idempotency_key IS 'Unique key for idempotent refund requests';
+
+-- =============================================
+-- PAYMENT CREATION FUNCTION WITH HISTORY
+-- =============================================
+
+-- Create payment with automatic history entry
+-- Supports retry functionality via idempotency key
+CREATE OR REPLACE FUNCTION create_payment_with_history(
+    p_user_id VARCHAR(255),
+    p_order_id VARCHAR(255),
+    p_amount INTEGER,
+    p_currency CHAR(3),
+    p_gateway_response JSONB DEFAULT '{}',
+    p_idempotency_key VARCHAR(255) DEFAULT NULL,
+    p_retry BOOLEAN DEFAULT FALSE,
+    p_metadata JSONB DEFAULT '{}'
+) RETURNS TABLE(
+    payment_id UUID,
+    status payment_status,
+    created_at TIMESTAMPTZ,
+    success BOOLEAN,
+    error_message TEXT
+) AS $$
+DECLARE
+    new_payment_id UUID;
+    payment_status payment_status := 'PENDING';
+    payment_created_at TIMESTAMPTZ;
+    error_msg TEXT;
+BEGIN
+    -- Validate input parameters
+    IF p_user_id IS NULL THEN
+        RETURN QUERY SELECT NULL::UUID, NULL::payment_status, NULL::TIMESTAMPTZ, FALSE, 'User ID is required'::TEXT;
+        RETURN;
+    END IF;
+    
+    IF p_order_id IS NULL OR length(trim(p_order_id)) = 0 THEN
+        RETURN QUERY SELECT NULL::UUID, NULL::payment_status, NULL::TIMESTAMPTZ, FALSE, 'Order ID is required'::TEXT;
+        RETURN;
+    END IF;
+    
+    IF p_amount IS NULL OR p_amount <= 0 THEN
+        RETURN QUERY SELECT NULL::UUID, NULL::payment_status, NULL::TIMESTAMPTZ, FALSE, 'Amount must be greater than 0'::TEXT;
+        RETURN;
+    END IF;
+    
+    IF p_currency IS NULL OR length(p_currency) != 3 THEN
+        RETURN QUERY SELECT NULL::UUID, NULL::payment_status, NULL::TIMESTAMPTZ, FALSE, 'Currency must be 3 characters'::TEXT;
+        RETURN;
+    END IF;
+    
+    -- Check for duplicate idempotency key with explicit alias
+    IF p_idempotency_key IS NOT NULL THEN
+        IF EXISTS (SELECT 1 FROM payments p WHERE p.idempotency_key = p_idempotency_key) THEN
+            -- Return existing payment with explicit alias
+            SELECT p.id, p.status, p.created_at INTO new_payment_id, payment_status, payment_created_at
+            FROM payments p
+            WHERE p.idempotency_key = p_idempotency_key;
+            
+            -- If retry is requested, return existing payment
+            IF p_retry THEN
+                RETURN QUERY SELECT new_payment_id, payment_status, payment_created_at, TRUE, 'Payment already exists'::TEXT;
+                RETURN;
+            ELSE
+                -- If not retry, return error
+                RETURN QUERY SELECT NULL::UUID, NULL::payment_status, NULL::TIMESTAMPTZ, FALSE, 'Payment already exists'::TEXT;
+                RETURN;
+            END IF;
+        END IF;
+    END IF;
+    
+    BEGIN
+        -- Insert payment
+        INSERT INTO payments (
+            user_id, order_id, amount, currency, status, 
+            gateway_response, idempotency_key, metadata
+        ) VALUES (
+            p_user_id, p_order_id, p_amount, p_currency, payment_status,
+            p_gateway_response, p_idempotency_key, p_metadata
+        ) RETURNING id, created_at INTO new_payment_id, payment_created_at;
+        
+        -- Insert payment history entry
+        INSERT INTO payment_history (
+            payment_id, status, metadata
+        ) VALUES (
+            new_payment_id, payment_status, p_metadata
+        );
+        
+        RETURN QUERY SELECT new_payment_id, payment_status, payment_created_at, TRUE, NULL::TEXT;
+        
+    EXCEPTION WHEN OTHERS THEN
+        error_msg := SQLERRM;
+        RETURN QUERY SELECT NULL::UUID, NULL::payment_status, NULL::TIMESTAMPTZ, FALSE, error_msg;
+    END;
+END;
+$$ LANGUAGE plpgsql;

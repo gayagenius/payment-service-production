@@ -19,7 +19,7 @@
 -- This function ensures atomicity between payment creation and history logging
 -- Supports retry functionality via idempotency key
 CREATE OR REPLACE FUNCTION create_payment_with_history(
-    p_user_id UUID,
+    p_user_id VARCHAR(255),
     p_order_id VARCHAR(255),
     p_amount INTEGER,
     p_currency CHAR(3),
@@ -113,7 +113,7 @@ CREATE OR REPLACE FUNCTION get_payment_by_id(
     p_payment_id UUID
 ) RETURNS TABLE(
     id UUID,
-    user_id UUID,
+    user_id VARCHAR(255),
     order_id VARCHAR(255),
     amount INTEGER,
     currency CHAR(3),
@@ -150,13 +150,13 @@ $$ LANGUAGE plpgsql;
 -- Function to safely read payments by user ID
 -- This function is replica-safe and handles pagination
 CREATE OR REPLACE FUNCTION get_payments_by_user(
-    p_user_id UUID,
+    p_user_id VARCHAR(255),
     p_limit INTEGER DEFAULT 50,
     p_offset INTEGER DEFAULT 0,
     p_status payment_status DEFAULT NULL
 ) RETURNS TABLE(
     id UUID,
-    user_id UUID,
+    user_id VARCHAR(255),
     order_id VARCHAR(255),
     amount INTEGER,
     currency CHAR(3),
@@ -296,14 +296,14 @@ $$ LANGUAGE plpgsql;
 -- Function to safely read individual user's payment history
 -- This function is replica-safe and handles pagination
 CREATE OR REPLACE FUNCTION get_user_payment_history(
-    p_user_id UUID,
+    p_user_id VARCHAR(255),
     p_limit INTEGER DEFAULT 100,
     p_offset INTEGER DEFAULT 0,
     p_start_date TIMESTAMPTZ DEFAULT NULL,
     p_end_date TIMESTAMPTZ DEFAULT NULL
 ) RETURNS TABLE(
     payment_id UUID,
-    user_id UUID,
+    user_id VARCHAR(255),
     order_id VARCHAR(255),
     amount INTEGER,
     currency CHAR(3),
@@ -378,7 +378,7 @@ $$ LANGUAGE plpgsql;
 
 -- Function to get payment history for a user
 CREATE OR REPLACE FUNCTION get_user_payment_history(
-    p_user_id UUID,
+    p_user_id VARCHAR(255),
     p_limit INTEGER DEFAULT 50,
     p_offset INTEGER DEFAULT 0
 ) RETURNS TABLE(
@@ -390,7 +390,7 @@ CREATE OR REPLACE FUNCTION get_user_payment_history(
     change_reason TEXT,
     metadata JSONB,
     created_at TIMESTAMPTZ,
-    user_id UUID,
+    user_id VARCHAR(255),
     order_id VARCHAR(255),
     amount INTEGER,
     currency CHAR(3)
@@ -798,7 +798,7 @@ CREATE OR REPLACE FUNCTION get_payment_summary(
     p_payment_id UUID
 ) RETURNS TABLE(
     payment_id UUID,
-    user_id UUID,
+    user_id VARCHAR(255),
     order_id VARCHAR(255),
     amount INTEGER,
     currency CHAR(3),
@@ -867,7 +867,7 @@ CREATE OR REPLACE FUNCTION get_all_payment_history(
     p_offset INTEGER DEFAULT 0
 ) RETURNS TABLE(
     payment_id UUID,
-    user_id UUID,
+    user_id VARCHAR(255),
     order_id VARCHAR(255),
     amount INTEGER,
     currency CHAR(3),

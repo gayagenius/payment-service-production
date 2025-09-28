@@ -99,7 +99,7 @@ router.get('/', async (req, res) => {
  * POST /payments - Create a new payment with retry support
  * 
  * Request Body:
- * - user_id: UUID of the user
+ * - user_id: String ID of the user
  * - order_id: Order identifier
  * - amount: Payment amount in minor units
  * - currency: Currency code (3 characters)

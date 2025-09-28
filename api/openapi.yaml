@@ -79,7 +79,6 @@ paths:
               paystack_card_success:
                 summary: Paystack Card Payment (Success)
                 value:
-                  userId: "550e8400-e29b-41d4-a716-446655440000"
                   orderId: "order_paystack_001"
                   amount: 2500
                   retry: false
@@ -90,17 +89,11 @@ paths:
                       items: ["Premium Plan", "Extra Storage"]
                       totalItems: 2
                       shippingAddress: "Nairobi, Kenya"
-                    user:
-                      id: "550e8400-e29b-41d4-a716-446655440000"
-                      email: "user@example.com"
-                      name: "John Doe"
-                      phone: "+254712345678"
                     gateway: "paystack"
                     testMode: true
               paystack_bank_transfer:
                 summary: Paystack Bank Transfer
                 value:
-                  userId: "550e8400-e29b-41d4-a716-446655440001"
                   orderId: "order_paystack_002"
                   amount: 5000
                   retry: false
@@ -108,16 +101,11 @@ paths:
                     order:
                       id: "order_paystack_002"
                       description: "Bank transfer payment"
-                    user:
-                      id: "550e8400-e29b-41d4-a716-446655440001"
-                      email: "bank@example.com"
-                      name: "Bank User"
                     gateway: "paystack"
                     testMode: true
               paystack_ussd_payment:
                 summary: Paystack USSD Payment
                 value:
-                  userId: "550e8400-e29b-41d4-a716-446655440002"
                   orderId: "order_paystack_003"
                   amount: 1000
                   retry: false
@@ -128,17 +116,11 @@ paths:
                       items: ["Digital Product"]
                       totalItems: 1
                       shippingAddress: "Digital Delivery"
-                    user:
-                      id: "550e8400-e29b-41d4-a716-446655440002"
-                      email: "ussd@example.com"
-                      name: "USSD User"
-                      phone: "254728287616"
                     gateway: "paystack"
                     testMode: true
               one_time_payment:
                 summary: One-time payment example
                 value:
-                  userId: "550e8400-e29b-41d4-a716-446655440000"
                   orderId: "order_456"
                   amount: 1000
                   retry: false
@@ -149,14 +131,10 @@ paths:
                       items: ["E-book", "Video Course"]
                       totalItems: 2
                       shippingAddress: "Digital Delivery"
-                    user:
-                      id: "550e8400-e29b-41d4-a716-446655440001"
-                      email: "jane@example.com"
-                      name: "Jane Smith"
-                      phone: "+33123456789"
               retry_payment:
                 summary: Retry payment example
                 value:
+                  orderId: "order_456"
                   amount: 2500
                   retry: true
                   idempotencyKey: "payment-user123-order456-1234567890"
@@ -167,11 +145,6 @@ paths:
                       items: ["Premium Plan"]
                       totalItems: 1
                       shippingAddress: "Nairobi, Kenya"
-                    user:
-                      id: "550e8400-e29b-41d4-a716-446655440000"
-                      email: "user@example.com"
-                      name: "John Doe"
-                      phone: "+254712345678"
       responses:
         '201':
           description: Payment created successfully
@@ -730,17 +703,13 @@ components:
       type: object
       required:
         - amount
+        - orderId
       properties:
         amount:
           type: integer
           description: Amount in minor units (e.g., cents for KES)
           minimum: 1
           example: 2500
-        userId:
-          type: string
-          format: uuid
-          description: ID of the user initiating the payment
-          example: "550e8400-e29b-41d4-a716-446655440000"
         orderId:
           type: string
           description: Associated order ID
