@@ -510,7 +510,10 @@ const mapPaystackStatus = (paystackStatus) => {
         'success': 'SUCCEEDED',
         'failed': 'FAILED',
         'reversed': 'REVERSED',
-        'refunded': 'REFUNDED'
+        'refunded': 'REFUNDED',
+        'abandoned': 'FAILED',  // Abandoned payments should be marked as failed
+        'cancelled': 'FAILED',  // Cancelled payments should be marked as failed
+        'timeout': 'FAILED'     // Timeout payments should be marked as failed
     };
 
     return statusMap[paystackStatus] || 'PENDING';

@@ -139,13 +139,13 @@ router.post('/', async (req, res) => {
         }
 
         // Validate amount for test mode (1-5)
-        if (amount < 1 || amount > 5) {
+        if (amount < 5 || amount > 10) {
             return res.status(400).json({
                 success: false,
                 error: {
                     code: 'INVALID_AMOUNT',
                     message: 'Invalid amount for test mode',
-                    details: 'Amount must be between 1 and 5 for test mode'
+                    details: 'Amount must be between 5 and 10 for test mode'
                 }
             });
         }
