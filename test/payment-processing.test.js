@@ -56,9 +56,21 @@ describe('Payment Processing', () => {
                 currency: 'USD',
                 email: 'user_123@example.com',
                 reference: 'test_key_123',
+                customer: {
+                    first_name: 'Customer',
+                    last_name: '',
+                    email: 'user_123@example.com',
+                    phone: '',
+                    user_id: 'user_123',
+                    metadata: {
+                        user_id: 'user_123',
+                        order_id: 'order_123'
+                    }
+                },
                 metadata: {
                     user_id: 'user_123',
-                    order_id: 'order_123'
+                    order_id: 'order_123',
+                    payment_id: undefined
                 },
                 callback_url: '//payments/return'
             });
@@ -96,9 +108,21 @@ describe('Payment Processing', () => {
                 currency: 'KES',
                 email: 'user_456@example.com',
                 reference: 'test_key_456',
+                customer: {
+                    first_name: 'Customer',
+                    last_name: '',
+                    email: 'user_456@example.com',
+                    phone: '',
+                    user_id: 'user_456',
+                    metadata: {
+                        user_id: 'user_456',
+                        order_id: 'order_456'
+                    }
+                },
                 metadata: {
                     user_id: 'user_456',
-                    order_id: 'order_456'
+                    order_id: 'order_456',
+                    payment_id: undefined
                 },
                 callback_url: '//payments/return'
             });

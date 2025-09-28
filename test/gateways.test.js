@@ -177,8 +177,8 @@ describe('Webhook Handling', () => {
 
             const result = await handleWebhook(event);
 
-            expect(result.success).toBe(true);
-            expect(result.transactionId).toBe('ref_1234567890');
+            expect(result.type).toBe('payment_update');
+            expect(result.payment_id).toBe('ref_1234567890');
             expect(result.status).toBe('SUCCEEDED');
         });
 
@@ -194,8 +194,8 @@ describe('Webhook Handling', () => {
 
             const result = await handleWebhook(event);
 
-            expect(result.success).toBe(true);
-            expect(result.transactionId).toBe('ref_1234567890');
+            expect(result.type).toBe('payment_update');
+            expect(result.payment_id).toBe('ref_1234567890');
             expect(result.status).toBe('FAILED');
         });
 
@@ -211,7 +211,7 @@ describe('Webhook Handling', () => {
 
             const result = await handleWebhook(event);
 
-            expect(result.success).toBe(true);
+            expect(result.type).toBe('refund_update');
             expect(result.refundId).toBe('refund_1234567890');
             expect(result.status).toBe('SUCCEEDED');
         });

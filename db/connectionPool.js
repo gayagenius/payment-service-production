@@ -28,11 +28,11 @@ const config = process.env.DATABASE_URL ? {
   }
 } : {
   write: {
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
-    database: process.env.DB_NAME || 'payment_service',
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'password',
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT,
+    database: process.env.DB_NAME,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
     max: parseInt(process.env.DB_WRITE_POOL_MAX) || DB_CONFIG.WRITE_POOL.MAX,
     min: parseInt(process.env.DB_WRITE_POOL_MIN) || DB_CONFIG.WRITE_POOL.MIN,
     idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT) || DB_CONFIG.WRITE_POOL.IDLE_TIMEOUT,
@@ -41,11 +41,11 @@ const config = process.env.DATABASE_URL ? {
   },
   
   read: {
-    host: process.env.DB_READ_HOST || process.env.DB_HOST || 'localhost',
-    port: process.env.DB_READ_PORT || process.env.DB_PORT || 5432,
-    database: process.env.DB_READ_NAME || process.env.DB_NAME || 'payment_service',
-    user: process.env.DB_READ_USER || process.env.DB_USER || 'postgres',
-    password: process.env.DB_READ_PASSWORD || process.env.DB_PASSWORD || 'password',
+    host: process.env.DB_READ_HOST || process.env.DB_HOST,
+    port: process.env.DB_READ_PORT || process.env.DB_PORT,
+    database: process.env.DB_READ_NAME || process.env.DB_NAME,
+    user: process.env.DB_READ_USER || process.env.DB_USER,
+    password: process.env.DB_READ_PASSWORD || process.env.DB_PASSWORD,
     max: parseInt(process.env.DB_READ_POOL_MAX) || DB_CONFIG.READ_POOL.MAX,
     min: parseInt(process.env.DB_READ_POOL_MIN) || DB_CONFIG.READ_POOL.MIN,
     idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT) || DB_CONFIG.READ_POOL.IDLE_TIMEOUT,
