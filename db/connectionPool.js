@@ -14,8 +14,10 @@ const config = process.env.DATABASE_URL ? {
     max: parseInt(process.env.DB_WRITE_POOL_MAX) || DB_CONFIG.WRITE_POOL.MAX,
     min: parseInt(process.env.DB_WRITE_POOL_MIN) || DB_CONFIG.WRITE_POOL.MIN,
     idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT) || DB_CONFIG.WRITE_POOL.IDLE_TIMEOUT,
-    connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT) || DB_CONFIG.WRITE_POOL.CONNECTION_TIMEOUT,
-    acquireTimeoutMillis: parseInt(process.env.DB_ACQUIRE_TIMEOUT) || DB_CONFIG.WRITE_POOL.ACQUIRE_TIMEOUT,
+    connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT) || 30000, // Increased to 30 seconds
+    acquireTimeoutMillis: parseInt(process.env.DB_ACQUIRE_TIMEOUT) || 60000, // Increased to 60 seconds
+    query_timeout: 30000, // Add query timeout
+    statement_timeout: 30000, // Add statement timeout
   },
   read: {
     connectionString: process.env.DATABASE_URL,
@@ -23,8 +25,10 @@ const config = process.env.DATABASE_URL ? {
     max: parseInt(process.env.DB_READ_POOL_MAX) || DB_CONFIG.READ_POOL.MAX,
     min: parseInt(process.env.DB_READ_POOL_MIN) || DB_CONFIG.READ_POOL.MIN,
     idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT) || DB_CONFIG.READ_POOL.IDLE_TIMEOUT,
-    connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT) || DB_CONFIG.READ_POOL.CONNECTION_TIMEOUT,
-    acquireTimeoutMillis: parseInt(process.env.DB_ACQUIRE_TIMEOUT) || DB_CONFIG.READ_POOL.ACQUIRE_TIMEOUT,
+    connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT) || 30000, // Increased to 30 seconds
+    acquireTimeoutMillis: parseInt(process.env.DB_ACQUIRE_TIMEOUT) || 60000, // Increased to 60 seconds
+    query_timeout: 30000, // Add query timeout
+    statement_timeout: 30000, // Add statement timeout
   }
 } : {
   write: {
@@ -74,6 +78,7 @@ class DatabasePoolManager extends EventEmitter {
     
     this.writePool = null;
     this.readPool = null;
+    this.tempReadPool = null; // Temporary read pool for fallback
     this.healthCheckInterval = null;
     this.isHealthy = { write: false, read: false };
     this.lastWriteTime = null;
@@ -81,6 +86,87 @@ class DatabasePoolManager extends EventEmitter {
     
     // Initialize pools
     this.initializePools();
+  }
+
+  /**
+   * Initialize read pool separately
+   */
+  async initializeReadPool() {
+    try {
+      if (this.readPool) {
+        await this.readPool.end();
+      }
+      
+      this.readPool = new pg.Pool({
+        ...config.read,
+        application_name: DB_CONFIG.APP_NAMES.READ,
+        ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : (process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false),
+      });
+
+      this.readPool.on('error', (err) => {
+        console.error('Read pool error:', err.message);
+        this.isHealthy.read = false;
+        this.emit('readPoolError', err);
+        // Don't let pool errors crash the application
+      });
+
+      // Add connection-level error handling
+      this.readPool.on('connect', (client) => {
+        client.on('error', (err) => {
+          console.error('Read client error:', err.message);
+          // Don't let client errors crash the application
+        });
+      });
+
+      this.isHealthy.read = true;
+      console.log('Read pool reinitialized successfully');
+    } catch (error) {
+      console.error('Failed to reinitialize read pool:', error.message);
+      this.isHealthy.read = false;
+      throw error;
+    }
+  }
+
+  /**
+   * Create a temporary read pool for fallback scenarios
+   */
+  async createTemporaryReadPool() {
+    try {
+      // Clean up existing temp pool if any
+      if (this.tempReadPool) {
+        await this.tempReadPool.end();
+      }
+      
+      // Create a smaller temporary read pool
+      const tempConfig = {
+        ...config.read,
+        max: Math.min(10, config.read.max), // Smaller pool for temporary use
+        min: Math.min(2, config.read.min),
+        application_name: `${DB_CONFIG.APP_NAMES.READ}_temp`,
+        ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : (process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false),
+      };
+      
+      this.tempReadPool = new pg.Pool(tempConfig);
+
+      this.tempReadPool.on('error', (err) => {
+        console.error('Temporary read pool error:', err.message);
+        this.emit('tempReadPoolError', err);
+        // Don't let temp pool errors crash the application
+      });
+
+      // Add connection-level error handling for temp pool
+      this.tempReadPool.on('connect', (client) => {
+        client.on('error', (err) => {
+          console.error('Temp read client error:', err.message);
+          // Don't let client errors crash the application
+        });
+      });
+
+      console.log('Temporary read pool created successfully');
+    } catch (error) {
+      console.error('Failed to create temporary read pool:', error.message);
+      throw error;
+    }
   }
 
   /**
@@ -104,12 +190,29 @@ class DatabasePoolManager extends EventEmitter {
         console.error('Write pool error:', err.message);
         this.isHealthy.write = false;
         this.emit('writePoolError', err);
+        // Don't let pool errors crash the application
       });
 
       this.readPool.on('error', (err) => {
         console.error('Read pool error:', err.message);
         this.isHealthy.read = false;
         this.emit('readPoolError', err);
+        // Don't let pool errors crash the application
+      });
+
+      // Add connection-level error handling
+      this.writePool.on('connect', (client) => {
+        client.on('error', (err) => {
+          console.error('Write client error:', err.message);
+          // Don't let client errors crash the application
+        });
+      });
+
+      this.readPool.on('connect', (client) => {
+        client.on('error', (err) => {
+          console.error('Read client error:', err.message);
+          // Don't let client errors crash the application
+        });
       });
 
       this.startHealthMonitoring();
@@ -234,12 +337,49 @@ class DatabasePoolManager extends EventEmitter {
    */
   async getReadClient() {
     if (!this.isHealthy.read) {
-      // Fallback to write pool if read pool is unhealthy
-      console.warn('Read pool unhealthy, falling back to write pool');
-      return this.getWriteClient();
+      // Try to reconnect read pool first
+      console.warn('Read pool unhealthy, attempting to reconnect...');
+      try {
+        await this.initializeReadPool();
+        if (this.isHealthy.read) {
+          console.log('Read pool reconnected successfully');
+          return this.readPool.connect();
+        }
+      } catch (reconnectError) {
+        console.error('Failed to reconnect read pool:', reconnectError.message);
+      }
+      
+      // Try to create a temporary read pool as fallback
+      console.warn('Read pool unavailable, creating temporary read pool...');
+      try {
+        await this.createTemporaryReadPool();
+        return this.tempReadPool.connect();
+      } catch (tempPoolError) {
+        console.error('Failed to create temporary read pool:', tempPoolError.message);
+        // Only fallback to write pool as absolute last resort
+        console.warn('All read options failed, falling back to write pool');
+        return this.getWriteClient();
+      }
     }
     
-    return this.readPool.connect();
+    try {
+      return await this.readPool.connect();
+    } catch (error) {
+      console.error('Read pool connection failed:', error.message);
+      this.isHealthy.read = false;
+      
+      // Try to create temporary read pool before falling back to write pool
+      try {
+        console.warn('Creating temporary read pool after connection failure...');
+        await this.createTemporaryReadPool();
+        return this.tempReadPool.connect();
+      } catch (tempPoolError) {
+        console.error('Failed to create temporary read pool:', tempPoolError.message);
+        // Fallback to write pool only as last resort
+        console.warn('All read options failed, falling back to write pool');
+        return this.getWriteClient();
+      }
+    }
   }
 
   /**
@@ -249,13 +389,37 @@ class DatabasePoolManager extends EventEmitter {
    * @returns {Promise<pg.QueryResult>} Query result
    */
   async executeWrite(query, params = []) {
-    const client = await this.getWriteClient();
+    let client;
     try {
-      const result = await client.query(query, params);
+      client = await this.getWriteClient();
+      
+      // Add timeout wrapper for query execution
+      const queryPromise = client.query(query, params);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Query timeout')), 30000); // 30 second timeout
+      });
+      
+      const result = await Promise.race([queryPromise, timeoutPromise]);
       this.lastWriteTime = Date.now();
       return result;
+    } catch (error) {
+      console.error('Database write error:', error.message);
+      
+      // Handle specific timeout errors
+      if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+        console.warn('Database write timeout - connection may be slow');
+        this.isHealthy.write = false; // Mark write pool as unhealthy
+      }
+      
+      throw new Error(`Database write failed: ${error.message}`);
     } finally {
-      client.release();
+      if (client) {
+        try {
+          client.release();
+        } catch (releaseError) {
+          console.warn('Error releasing database client:', releaseError.message);
+        }
+      }
     }
   }
 
@@ -286,11 +450,44 @@ class DatabasePoolManager extends EventEmitter {
     }
     
     // Use read pool
-    const client = await this.getReadClient();
+    let client;
     try {
-      return await client.query(query, params);
+      client = await this.getReadClient();
+      
+      // Add timeout wrapper for query execution
+      const queryPromise = client.query(query, params);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Query timeout')), 30000); // 30 second timeout
+      });
+      
+      const result = await Promise.race([queryPromise, timeoutPromise]);
+      
+      // Log if we're using write pool for reads (fallback scenario)
+      if (client.pool === this.writePool) {
+        console.warn('⚠️ Using write pool for read operation - this may impact performance');
+      } else if (client.pool === this.tempReadPool) {
+        console.warn('⚠️ Using temporary read pool - read pool recovery in progress');
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Database read error:', error.message);
+      
+      // Handle specific timeout errors
+      if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+        console.warn('Database read timeout - connection may be slow');
+        this.isHealthy.read = false; // Mark read pool as unhealthy
+      }
+      
+      throw new Error(`Database read failed: ${error.message}`);
     } finally {
-      client.release();
+      if (client) {
+        try {
+          client.release();
+        } catch (releaseError) {
+          console.warn('Error releasing database client:', releaseError.message);
+        }
+      }
     }
   }
 
@@ -389,6 +586,10 @@ class DatabasePoolManager extends EventEmitter {
     
     if (this.readPool) {
       await this.readPool.end();
+    }
+    
+    if (this.tempReadPool) {
+      await this.tempReadPool.end();
     }
     
     console.log('Database connection pools closed');

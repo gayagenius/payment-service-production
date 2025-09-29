@@ -190,7 +190,20 @@ router.post('/', async (req, res) => {
 
         // Verify token with user service
         console.log('Verifying token with user service...');
-        const tokenVerification = await verifyToken(authToken);
+        let tokenVerification;
+        try {
+            tokenVerification = await verifyToken(authToken);
+        } catch (tokenError) {
+            console.error('Token verification error:', tokenError.message);
+            return res.status(401).json({
+                success: false,
+                error: {
+                    code: 'TOKEN_VERIFICATION_ERROR',
+                    message: 'Token verification failed',
+                    details: tokenError.message
+                }
+            });
+        }
         
         if (!tokenVerification.success) {
             console.error('Token verification failed:', tokenVerification.error);

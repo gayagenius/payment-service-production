@@ -136,6 +136,34 @@ app.use((err, req, res, next) => {
 });
 
 // --------------------
+// Global Error Handlers (Prevent Server Crashes)
+// --------------------
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Promise Rejection at:', promise, 'reason:', reason);
+  process.exit(0);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  process.exit(0);
+});
+
+// Handle SIGTERM gracefully
+process.on('SIGTERM', () => {
+  console.log('📴 SIGTERM received, shutting down gracefully');
+  process.exit(0);
+});
+
+// Handle SIGINT gracefully
+process.on('SIGINT', () => {
+  console.log('📴 SIGINT received, shutting down gracefully');
+  process.exit(0);
+});
+
+// --------------------
 // Start server
 // --------------------
 const startServer = () => {
