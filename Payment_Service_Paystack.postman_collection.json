@@ -286,7 +286,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n  \"payment_id\": \"{{payment_id}}\",\n  \"amount\": 1000,\n  \"currency\": \"KES\",\n  \"reason\": \"Customer requested refund\"\n}"
+					"raw": "{\n  \"payment_id\": \"{{payment_id}}\",\n  \"amount\": 1000,\n  \"reason\": \"Customer requested refund\"\n}"
 				},
 				"url": {
 					"raw": "{{base_url}}/refunds",
