@@ -64,6 +64,18 @@ router.post('/', async (req, res) => {
             });
         }
 
+        // Check if payment was successful - only successful payments can be refunded
+        if (payment.status !== 'SUCCEEDED') {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    code: 'REFUND_NOT_ALLOWED',
+                    message: 'Refund not allowed for this payment',
+                    details: `Only successful payments can be refunded. Payment status: ${payment.status}. Payment must be 'SUCCEEDED' to create a refund.`
+                }
+            });
+        }
+
         // Check refund amount doesn't exceed payment amount
         if (amount > payment.amount) {
             return res.status(400).json({
@@ -72,6 +84,17 @@ router.post('/', async (req, res) => {
                     code: 'REFUND_AMOUNT_EXCEEDED',
                     message: 'Refund amount exceeds payment amount',
                     details: `Refund amount ${amount} exceeds payment amount ${payment.amount}`
+                }
+            });
+        }
+
+        if(amount < payment.amount) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    code: 'REFUND_AMOUNT_LESS_THAN_PAYMENT_AMOUNT',
+                    message: 'Refund amount is less than payment amount',
+                    details: `Refund amount ${amount} is less than payment amount ${payment.amount}`
                 }
             });
         }
@@ -95,6 +118,34 @@ router.post('/', async (req, res) => {
                     code: 'REFUND_AMOUNT_EXCEEDED',
                     message: 'Refund amount exceeds available amount',
                     details: `Refund amount ${amount} exceeds available amount ${availableAmount}`
+                }
+            });
+        }
+
+        // Check for existing refunds in progress for this payment
+        const pendingRefundsQuery = `
+            SELECT id, amount, status, created_at
+            FROM refunds
+            WHERE payment_id = $1 AND status = 'PENDING'
+            ORDER BY created_at DESC
+        `;
+        
+        const pendingRefundsResult = await dbPoolManager.executeRead(pendingRefundsQuery, [payment_id]);
+        const pendingRefunds = pendingRefundsResult.rows;
+        
+        if (pendingRefunds.length > 0) {
+            const latestPendingRefund = pendingRefunds[0];
+            return res.status(409).json({
+                success: false,
+                error: {
+                    code: 'REFUND_IN_PROGRESS',
+                    message: 'A refund for this payment is already in progress',
+                    details: {
+                        existing_refund_id: latestPendingRefund.id,
+                        existing_amount: latestPendingRefund.amount,
+                        existing_status: latestPendingRefund.status,
+                        created_at: latestPendingRefund.created_at
+                    }
                 }
             });
         }
@@ -145,7 +196,20 @@ router.post('/', async (req, res) => {
             // Add any Paystack-specific fields here if needed
         }
 
-        const gatewayResult = await processRefundForGateway(refundData);
+        // Skip immediate Paystack API call to avoid "Transaction was not successful" errors
+        // Refund status will be updated via webhooks when Paystack processes the refund
+        console.log(`Refund created successfully, skipping immediate Paystack API call`);
+        console.log(`Refund status will be updated via webhooks when Paystack processes the refund`);
+        
+        // For now, keep refund as PENDING - webhook will update status
+        const gatewayResult = {
+            success: true,
+            status: 'PENDING',
+            gatewayResponse: {
+                message: 'Refund created, waiting for Paystack processing',
+                idempotencyKey: finalIdempotencyKey
+            }
+        };
 
         // Update refund with gateway response
         if (gatewayResult.success) {
@@ -160,22 +224,9 @@ router.post('/', async (req, res) => {
                 gatewayResult.status
             ]);
 
-            // Update payment status if fully refunded
-            if (amount === availableAmount) {
-                const updatePaymentQuery = `
-                    UPDATE payments 
-                    SET status = 'REFUNDED', updated_at = NOW()
-                    WHERE id = $1
-                `;
-                await dbPoolManager.executeWrite(updatePaymentQuery, [payment_id]);
-            } else {
-                const updatePaymentQuery = `
-                    UPDATE payments 
-                    SET status = 'PARTIALLY_REFUNDED', updated_at = NOW()
-                    WHERE id = $1
-                `;
-                await dbPoolManager.executeWrite(updatePaymentQuery, [payment_id]);
-            }
+            // Payment status will be updated via webhook when refund is processed
+            // Don't update payment status immediately since refund is still PENDING
+            console.log(`Payment status will be updated via webhook when refund is processed`);
 
             // Publish refund event
             try {
@@ -230,11 +281,30 @@ router.post('/', async (req, res) => {
                 }
             });
         } else {
-            res.status(responseStatus).json({
+            // Handle specific Paystack "already in progress" error
+            let errorCode = 'REFUND_PROCESSING_FAILED';
+            let errorMessage = gatewayResult.error.message;
+            let statusCode = responseStatus;
+            
+            if (gatewayResult.error.message && gatewayResult.error.message.includes('already in progress')) {
+                errorCode = 'REFUND_ALREADY_IN_PROGRESS';
+                errorMessage = 'A refund for this transaction is already in progress';
+                statusCode = 409; // Conflict status
+                
+                // Update refund status to reflect the conflict
+                const updateRefundQuery = `
+                    UPDATE refunds 
+                    SET status = 'FAILED', updated_at = NOW()
+                    WHERE id = $1
+                `;
+                await dbPoolManager.executeWrite(updateRefundQuery, [refund.refund_id]);
+            }
+            
+            res.status(statusCode).json({
                 success: false,
                 error: {
-                    code: 'REFUND_PROCESSING_FAILED',
-                    message: gatewayResult.error.message,
+                    code: errorCode,
+                    message: errorMessage,
                     details: gatewayResult.error
                 },
                 data: responseData

@@ -545,33 +545,11 @@ router.post('/', async (req, res) => {
                 paymentResult.payment_id
             ]);
 
-            // Sync payment status with Paystack for real-time updates
-            try {
-                console.log(`Syncing payment status with Paystack for reference: ${finalIdempotencyKey}`);
-                const syncResult = await syncPaymentStatusWithPaystack(finalIdempotencyKey, gatewayResult.status);
-                
-                if (syncResult.success && syncResult.synced && syncResult.status !== gatewayResult.status) {
-                    console.log(`Payment status updated from ${gatewayResult.status} to ${syncResult.status} via Paystack sync`);
-                    
-                    // Update database with latest status from Paystack
-                    const syncUpdateQuery = `
-                        UPDATE payments 
-                        SET status = $1, gateway_response = $2, updated_at = NOW()
-                        WHERE id = $3
-                    `;
-                    
-                    await dbPoolManager.executeWrite(syncUpdateQuery, [
-                        syncResult.status,
-                        JSON.stringify(syncResult.gatewayResponse),
-                        paymentResult.payment_id
-                    ]);
-                    
-                    gatewayResult.status = syncResult.status;
-                    gatewayResult.gatewayResponse = syncResult.gatewayResponse;
-                }
-            } catch (syncError) {
-                console.warn('Failed to sync payment status with Paystack:', syncError.message);
-            }
+            // Skip immediate status sync for test payments to avoid "abandoned" status
+            // Paystack marks payments as "abandoned" when users don't complete the payment flow
+            // Status will be updated via webhooks when user actually completes payment
+            console.log(`Payment created successfully, skipping immediate sync to avoid abandoned status`);
+            console.log(`Payment status will be updated via webhooks when user completes payment flow`);
 
             // Publish payment event
             try {
