@@ -87,24 +87,89 @@ async function updateRefundByPaystackId(paystackRefundId, status, gatewayRespons
     try {
         console.log(`Looking up refund with Paystack ID: ${paystackRefundId}`);
         
-        // Find refund by Paystack refund ID (stored in gateway_response)
-        const findRefundQuery = `
-            SELECT id, payment_id, amount, status
+        // First, try to find refund by Paystack refund ID in gateway_response
+        let findRefundQuery = `
+            SELECT id, payment_id, amount, status, gateway_response
             FROM refunds
-            WHERE gateway_response->>'id' = $1
+            WHERE gateway_response->>'refund_id' = $1 
+               OR gateway_response->>'id' = $1
             ORDER BY created_at DESC
             LIMIT 1
         `;
         
-        const refundResult = await dbPoolManager.executeRead(findRefundQuery, [paystackRefundId]);
+        let refundResult = await dbPoolManager.executeRead(findRefundQuery, [paystackRefundId.toString()]);
+        
+        // If not found, try with integer conversion
+        if (refundResult.rows.length === 0) {
+            console.log(`Trying integer lookup for Paystack ID: ${paystackRefundId}`);
+            refundResult = await dbPoolManager.executeRead(findRefundQuery, [parseInt(paystackRefundId)]);
+        }
+        
+        // If still not found, try a broader search for recent refunds
+        if (refundResult.rows.length === 0) {
+            console.log(`Trying broader search for recent refunds...`);
+            const broadSearchQuery = `
+                SELECT id, payment_id, amount, status, gateway_response
+                FROM refunds
+                WHERE created_at > NOW() - INTERVAL '10 minutes'
+                ORDER BY created_at DESC
+                LIMIT 10
+            `;
+            const broadResult = await dbPoolManager.executeRead(broadSearchQuery);
+            
+            console.log(`Found ${broadResult.rows.length} recent refunds`);
+            
+            // Look for refund with matching Paystack ID in the results
+            for (const refund of broadResult.rows) {
+                try {
+                    const gatewayResponse = typeof refund.gateway_response === 'string' 
+                        ? JSON.parse(refund.gateway_response) 
+                        : refund.gateway_response;
+                    
+                    if (gatewayResponse?.refund_id == paystackRefundId || 
+                        gatewayResponse?.id == paystackRefundId) {
+                        console.log(`Found matching refund ${refund.id} in broad search`);
+                        refundResult = { rows: [refund] };
+                        break;
+                    }
+                } catch (parseError) {
+                    console.warn(`Failed to parse gateway response for refund ${refund.id}:`, parseError.message);
+                }
+            }
+        }
         
         if (refundResult.rows.length === 0) {
             console.warn(`No refund found with Paystack ID: ${paystackRefundId}`);
-            return;
+            
+            // Try one more time with a small delay (in case of timing issues)
+            console.log(`Waiting 2 seconds and retrying...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            refundResult = await dbPoolManager.executeRead(findRefundQuery, [paystackRefundId.toString()]);
+            
+            if (refundResult.rows.length === 0) {
+                // Debug: Show recent refunds for troubleshooting
+                const debugQuery = `
+                    SELECT id, payment_id, amount, status, gateway_response, created_at
+                    FROM refunds
+                    WHERE created_at > NOW() - INTERVAL '1 hour'
+                    ORDER BY created_at DESC
+                    LIMIT 5
+                `;
+                const debugResult = await dbPoolManager.executeRead(debugQuery);
+                console.log('Recent refunds for debugging:', debugResult.rows.map(r => ({
+                    id: r.id,
+                    status: r.status,
+                    created_at: r.created_at,
+                    gateway_response: r.gateway_response
+                })));
+                return;
+            }
         }
         
         const refund = refundResult.rows[0];
         console.log(`Found refund ${refund.id} for Paystack refund ${paystackRefundId}`);
+        console.log(`Refund gateway_response:`, refund.gateway_response);
         
         // Check if refund is already in final state to prevent duplicate processing
         if (['SUCCEEDED', 'FAILED'].includes(refund.status)) {
@@ -116,13 +181,36 @@ async function updateRefundByPaystackId(paystackRefundId, status, gatewayRespons
         
         // Update payment status if refund succeeded
         if (status === 'SUCCEEDED') {
+            // Check if this is a full or partial refund
+            const totalRefundedQuery = `
+                SELECT COALESCE(SUM(amount), 0) as total_refunded
+                FROM refunds
+                WHERE payment_id = $1 AND status = 'SUCCEEDED'
+            `;
+            const totalRefundedResult = await dbPoolManager.executeRead(totalRefundedQuery, [refund.payment_id]);
+            const totalRefunded = parseFloat(totalRefundedResult.rows[0].total_refunded);
+            
+            // Get payment amount
+            const paymentQuery = `
+                SELECT amount FROM payments WHERE id = $1
+            `;
+            const paymentResult = await dbPoolManager.executeRead(paymentQuery, [refund.payment_id]);
+            const paymentAmount = parseFloat(paymentResult.rows[0].amount);
+            
+            let paymentStatus;
+            if (totalRefunded >= paymentAmount) {
+                paymentStatus = 'REFUNDED';
+            } else {
+                paymentStatus = 'PARTIALLY_REFUNDED';
+            }
+            
             const updatePaymentQuery = `
                 UPDATE payments 
-                SET status = 'REFUNDED', updated_at = NOW()
+                SET status = $2, updated_at = NOW()
                 WHERE id = $1
             `;
-            await dbPoolManager.executeWrite(updatePaymentQuery, [refund.payment_id]);
-            console.log(`Payment ${refund.payment_id} marked as REFUNDED`);
+            await dbPoolManager.executeWrite(updatePaymentQuery, [refund.payment_id, paymentStatus]);
+            console.log(`Payment ${refund.payment_id} marked as ${paymentStatus} (total refunded: ${totalRefunded}/${paymentAmount})`);
         }
         
     } catch (error) {

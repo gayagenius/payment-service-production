@@ -3,21 +3,28 @@ import dbPoolManager from '../db/connectionPool.js';
 import { API_CONFIG, PAYMENT_CONFIG, SECURITY_CONFIG } from '../config/constants.js';
 import { processRefundForGateway } from '../services/paymentProcessor.js';
 import { publishPaymentEvent } from '../messaging/publishPaymentEvent.js';
+import { validateToken, validateHttpMethod, validateIdempotencyKey } from '../middleware/auth.js';
 
 const router = express.Router();
 
 /**
  * POST /refunds - Create a refund for a payment
  */
-router.post('/', async (req, res) => {
+router.post('/', 
+    validateHttpMethod(['POST']),
+    validateToken,
+    validateIdempotencyKey,
+    async (req, res) => {
     try {
         const {
             payment_id,
             amount,
             reason,
-            metadata = {},
-            idempotencyKey
+            metadata = {}
         } = req.body;
+
+        // Get idempotency key from middleware
+        const idempotencyKey = req.idempotencyKey;
 
         // Validate required fields
         if (!payment_id || !amount) {
@@ -60,6 +67,36 @@ router.post('/', async (req, res) => {
                     code: 'PAYMENT_NOT_FOUND',
                     message: 'Payment not found',
                     details: `No payment found with ID: ${payment_id}`
+                }
+            });
+        }
+
+        // Extract Paystack transaction reference from payment gateway response
+        let paystackTransactionId;
+        try {
+            const gatewayResponse = typeof payment.gateway_response === 'string' 
+                ? JSON.parse(payment.gateway_response) 
+                : payment.gateway_response;
+            
+            paystackTransactionId = gatewayResponse?.reference || gatewayResponse?.transaction_id;
+            
+            if (!paystackTransactionId) {
+                return res.status(400).json({
+                    success: false,
+                    error: {
+                        code: 'INVALID_PAYMENT_DATA',
+                        message: 'Payment missing Paystack transaction reference',
+                        details: 'Payment does not have a valid Paystack transaction reference for refund processing'
+                    }
+                });
+            }
+        } catch (parseError) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    code: 'INVALID_PAYMENT_DATA',
+                    message: 'Invalid payment gateway response data',
+                    details: 'Payment gateway response is not valid JSON'
                 }
             });
         }
@@ -122,6 +159,36 @@ router.post('/', async (req, res) => {
             });
         }
 
+        // Check for existing refund with same idempotency key
+        const existingRefundQuery = `
+            SELECT id, payment_id, amount, status, created_at
+            FROM refunds
+            WHERE idempotency_key = $1
+            ORDER BY created_at DESC
+            LIMIT 1
+        `;
+        
+        const existingRefundResult = await dbPoolManager.executeRead(existingRefundQuery, [idempotencyKey]);
+        
+        if (existingRefundResult.rows.length > 0) {
+            const existingRefund = existingRefundResult.rows[0];
+            return res.status(409).json({
+                success: false,
+                error: {
+                    code: 'DUPLICATE_IDEMPOTENCY_KEY',
+                    message: 'A refund with this idempotency key already exists',
+                    details: {
+                        existing_refund_id: existingRefund.id,
+                        existing_payment_id: existingRefund.payment_id,
+                        existing_amount: existingRefund.amount,
+                        existing_status: existingRefund.status,
+                        created_at: existingRefund.created_at,
+                        idempotency_key: idempotencyKey
+                    }
+                }
+            });
+        }
+
         // Check for existing refunds in progress for this payment
         const pendingRefundsQuery = `
             SELECT id, amount, status, created_at
@@ -175,10 +242,10 @@ router.post('/', async (req, res) => {
 
         const refund = refundResult.rows[0];
 
-        // Process refund with gateway
+        // Process refund with Paystack
         const refundData = {
             gateway,
-            transactionId: payment?.gateway_response?.reference,
+            transactionId: paystackTransactionId, // Use the extracted Paystack transaction reference
             amount,
             reason: reason || 'Customer requested refund',
             metadata: {
@@ -196,37 +263,134 @@ router.post('/', async (req, res) => {
             // Add any Paystack-specific fields here if needed
         }
 
-        // Skip immediate Paystack API call to avoid "Transaction was not successful" errors
-        // Refund status will be updated via webhooks when Paystack processes the refund
-        console.log(`Refund created successfully, skipping immediate Paystack API call`);
-        console.log(`Refund status will be updated via webhooks when Paystack processes the refund`);
-        
-        // For now, keep refund as PENDING - webhook will update status
-        const gatewayResult = {
-            success: true,
-            status: 'PENDING',
-            gatewayResponse: {
-                message: 'Refund created, waiting for Paystack processing',
-                idempotencyKey: finalIdempotencyKey
+        // Process refund with Paystack API
+        let gatewayResult;
+        try {
+            console.log(`Processing refund with Paystack for transaction: ${paystackTransactionId}`);
+            gatewayResult = await processRefundForGateway(refundData);
+            console.log('Paystack refund response:', gatewayResult);
+        } catch (gatewayError) {
+            console.error('Gateway refund processing failed:', gatewayError);
+            
+            // Handle specific Paystack errors
+            if (gatewayError.message && gatewayError.message.includes('already in progress')) {
+                // Update refund status to FAILED
+                const updateRefundQuery = `
+                    UPDATE refunds
+                    SET status = 'FAILED', gateway_response = $2, updated_at = NOW()
+                    WHERE id = $1
+                `;
+                await dbPoolManager.executeWrite(updateRefundQuery, [
+                    refund.refund_id,
+                    JSON.stringify({
+                        code: 'PAYSTACK_ERROR',
+                        message: 'A refund for this transaction is already in progress',
+                        type: 'refund_error'
+                    })
+                ]);
+                
+                return res.status(409).json({
+                    success: false,
+                    error: {
+                        code: 'REFUND_ALREADY_IN_PROGRESS',
+                        message: 'A refund for this transaction is already in progress',
+                        details: {
+                            code: 'PAYSTACK_ERROR',
+                            message: 'A refund for this transaction is already in progress',
+                            type: 'refund_error'
+                        }
+                    }
+                });
             }
-        };
+            
+            // For other gateway errors, mark refund as failed
+            const updateRefundQuery = `
+                UPDATE refunds
+                SET status = 'FAILED', gateway_response = $2, updated_at = NOW()
+                WHERE id = $1
+            `;
+            await dbPoolManager.executeWrite(updateRefundQuery, [
+                refund.refund_id,
+                JSON.stringify({
+                    code: 'PAYSTACK_ERROR',
+                    message: gatewayError.message || 'Refund processing failed',
+                    type: 'refund_error',
+                    originalError: gatewayError
+                })
+            ]);
+            
+            return res.status(500).json({
+                success: false,
+                error: {
+                    code: 'REFUND_PROCESSING_FAILED',
+                    message: gatewayError.message || 'Refund processing failed',
+                    details: gatewayError
+                }
+            });
+        }
 
         // Update refund with gateway response
         if (gatewayResult.success) {
+            // Update refund status and gateway response
             const updateRefundQuery = `
                 UPDATE refunds 
-                SET status = $2, updated_at = NOW()
+                SET status = $2, gateway_response = $3, updated_at = NOW()
                 WHERE id = $1
             `;
             
             await dbPoolManager.executeWrite(updateRefundQuery, [
                 refund.refund_id,
-                gatewayResult.status
+                gatewayResult.status,
+                JSON.stringify(gatewayResult.gatewayResponse)
             ]);
 
-            // Payment status will be updated via webhook when refund is processed
-            // Don't update payment status immediately since refund is still PENDING
-            console.log(`Payment status will be updated via webhook when refund is processed`);
+            // Update payment status based on refund status
+            if (gatewayResult.status === 'SUCCEEDED') {
+                // Check if this is a full or partial refund
+                const totalRefundedQuery = `
+                    SELECT COALESCE(SUM(amount), 0) as total_refunded
+                    FROM refunds
+                    WHERE payment_id = $1 AND status = 'SUCCEEDED'
+                `;
+                const totalRefundedResult = await dbPoolManager.executeRead(totalRefundedQuery, [payment_id]);
+                const totalRefunded = parseFloat(totalRefundedResult.rows[0].total_refunded);
+                
+                let paymentStatus;
+                if (totalRefunded >= payment.amount) {
+                    paymentStatus = 'REFUNDED';
+                } else {
+                    paymentStatus = 'PARTIALLY_REFUNDED';
+                }
+                
+                // Update payment status and gateway response
+                const updatePaymentQuery = `
+                    UPDATE payments
+                    SET status = $2, gateway_response = $3, updated_at = NOW()
+                    WHERE id = $1
+                `;
+                
+                // Merge the refund response into the payment's gateway response
+                const updatedGatewayResponse = {
+                    ...gatewayResponse,
+                    refunds: {
+                        ...gatewayResponse.refunds,
+                        [refund.refund_id]: {
+                            amount: amount,
+                            status: gatewayResult.status,
+                            gatewayResponse: gatewayResult.gatewayResponse,
+                            processedAt: new Date().toISOString()
+                        }
+                    }
+                };
+                
+                await dbPoolManager.executeWrite(updatePaymentQuery, [
+                    payment_id,
+                    paymentStatus,
+                    JSON.stringify(updatedGatewayResponse)
+                ]);
+                
+                console.log(`Payment ${payment_id} updated to ${paymentStatus} (total refunded: ${totalRefunded}/${payment.amount})`);
+            }
 
             // Publish refund event
             try {
@@ -247,12 +411,13 @@ router.post('/', async (req, res) => {
             // Update refund with failure status
             const updateRefundQuery = `
                 UPDATE refunds 
-                SET status = 'FAILED', updated_at = NOW()
+                SET status = 'FAILED', gateway_response = $2, updated_at = NOW()
                 WHERE id = $1
             `;
             
             await dbPoolManager.executeWrite(updateRefundQuery, [
-                refund.refund_id
+                refund.refund_id,
+                JSON.stringify(gatewayResult.gatewayResponse || { error: 'Refund processing failed' })
             ]);
         }
 
@@ -327,7 +492,10 @@ router.post('/', async (req, res) => {
 /**
  * GET /refunds - Get all refunds with pagination
  */
-router.get('/', async (req, res) => {
+router.get('/', 
+    validateHttpMethod(['GET']),
+    validateToken,
+    async (req, res) => {
     try {
         const {
             limit = API_CONFIG.DEFAULT_PAGINATION_LIMIT,
@@ -418,7 +586,10 @@ router.get('/', async (req, res) => {
 /**
  * GET /refunds/{id} - Get refund by ID
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', 
+    validateHttpMethod(['GET']),
+    validateToken,
+    async (req, res) => {
     try {
         const { id } = req.params;
 

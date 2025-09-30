@@ -1,13 +1,17 @@
 import express from 'express';
 import dbPoolManager from '../db/connectionPool.js';
 import { API_CONFIG, SECURITY_CONFIG } from '../config/constants.js';
+import { validateToken, validateHttpMethod } from '../middleware/auth.js';
 
 const router = express.Router();
 
 /**
  * GET /payment-history - Get all payment history with pagination
  */
-router.get('/', async (req, res) => {
+router.get('/', 
+    validateHttpMethod(['GET']),
+    validateToken,
+    async (req, res) => {
     try {
         const { limit = API_CONFIG.DEFAULT_PAGINATION_LIMIT, offset = API_CONFIG.DEFAULT_PAGINATION_OFFSET } = req.query;
 
@@ -78,7 +82,10 @@ router.get('/', async (req, res) => {
 /**
  * GET /payment-history/:payment_id - Get payment history for a specific payment
  */
-router.get('/:payment_id', async (req, res) => {
+router.get('/:payment_id', 
+    validateHttpMethod(['GET']),
+    validateToken,
+    async (req, res) => {
     try {
         const { payment_id } = req.params;
 
@@ -143,7 +150,10 @@ router.get('/:payment_id', async (req, res) => {
 /**
  * GET /payment-history/user/:userId - Get payment history for a user
  */
-router.get('/user/:userId', async (req, res) => {
+router.get('/user/:userId', 
+    validateHttpMethod(['GET']),
+    validateToken,
+    async (req, res) => {
     try {
         const { userId } = req.params;
         const { limit = API_CONFIG.DEFAULT_PAGINATION_LIMIT, offset = API_CONFIG.DEFAULT_PAGINATION_OFFSET } = req.query;
@@ -247,7 +257,10 @@ router.get('/user/:userId', async (req, res) => {
 /**
  * POST /payment-history - Manually create a payment history entry
  */
-router.post('/', async (req, res) => {
+router.post('/', 
+    validateHttpMethod(['POST']),
+    validateToken,
+    async (req, res) => {
     try {
         const {
             payment_id,

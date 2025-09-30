@@ -15,6 +15,7 @@ import webhooks from "../routes/webhooks.js";
 import queueHealthRouter from "../routes/queueHealth.js";
 import testRouter from "../routes/test.js";
 import { connect } from "../messaging/queueSetup.js";
+import { validateToken, validateHttpMethod } from '../middleware/auth.js';
 import('./../docs-server.js');
 
 import {

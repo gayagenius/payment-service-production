@@ -4,13 +4,17 @@ import { API_CONFIG, PAYMENT_CONFIG, SECURITY_CONFIG } from '../config/constants
 import { processPayment, createPaymentMethodForGateway, syncPaymentStatusWithPaystack } from '../services/paymentProcessor.js';
 import { publishPaymentEvent } from '../messaging/publishPaymentEvent.js';
 import { verifyToken, extractUserId, extractUserDetails } from '../services/userService.js';
+import { validateToken, validateHttpMethod, validateIdempotencyKey } from '../middleware/auth.js';
 
 const router = express.Router();
 
 /**
  * GET /payments - Get all payments with pagination
  */
-router.get('/', async (req, res) => {
+router.get('/', 
+    validateHttpMethod(['GET']),
+    validateToken,
+    async (req, res) => {
     try {
         const {
             limit = API_CONFIG.DEFAULT_PAGINATION_LIMIT,
@@ -103,16 +107,22 @@ router.get('/', async (req, res) => {
 /**
  * POST /payments - Create a new payment with real gateway processing
  */
-router.post('/', async (req, res) => {
+router.post('/', 
+    validateHttpMethod(['POST']),
+    validateToken,
+    validateIdempotencyKey,
+    async (req, res) => {
     try {
         const {
             orderId: order_id,
             amount,
             currency = 'KES',
             metadata = {},
-            idempotencyKey,
             retry = false
         } = req.body;
+
+        // Get idempotency key from middleware
+        const idempotencyKey = req.idempotencyKey;
 
         // Validate required fields
         if (!order_id || amount === undefined || amount === null) {
@@ -150,103 +160,14 @@ router.post('/', async (req, res) => {
             });
         }
 
-        // Validate authorization header
-        const authHeader = req.headers.authorization;
-        if (!authHeader) {
-            return res.status(401).json({
-                success: false,
-                error: {
-                    code: 'MISSING_AUTHORIZATION',
-                    message: 'Authorization header is required',
-                    details: 'Authorization header with Bearer token is required'
-                }
-            });
-        }
-
-        // Validate authorization header format (Bearer token)
-        if (!authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({
-                success: false,
-                error: {
-                    code: 'INVALID_AUTHORIZATION_FORMAT',
-                    message: 'Invalid authorization format',
-                    details: 'Authorization header must start with "Bearer "'
-                }
-            });
-        }
-
-        // Extract token from header
-        const authToken = authHeader.substring(7); // Remove "Bearer " prefix
-        if (!authToken || authToken.trim().length === 0) {
-            return res.status(401).json({
-                success: false,
-                error: {
-                    code: 'INVALID_AUTH_TOKEN',
-                    message: 'Invalid authorization token',
-                    details: 'Authorization token must be a non-empty string'
-                }
-            });
-        }
-
-        // Verify token with user service
-        console.log('Verifying token with user service...');
-        let tokenVerification;
-        try {
-            tokenVerification = await verifyToken(authToken);
-        } catch (tokenError) {
-            console.error('Token verification error:', tokenError.message);
-            return res.status(401).json({
-                success: false,
-                error: {
-                    code: 'TOKEN_VERIFICATION_ERROR',
-                    message: 'Token verification failed',
-                    details: tokenError.message
-                }
-            });
-        }
+        // Get user details from middleware (token already validated)
+        const user_id = req.user.id;
+        const userDetails = req.user.details;
         
-        if (!tokenVerification.success) {
-            console.error('Token verification failed:', tokenVerification.error);
-            return res.status(401).json({
-                success: false,
-                error: {
-                    code: 'NOT_AUTHORIZED',
-                    message: 'Not Authorized',
-                    details: tokenVerification.error
-                }
-            });
-        }
-
-        // Extract user details from token verification
-        const userDetails = extractUserDetails(tokenVerification);
-        const user_id = extractUserId(tokenVerification);
-        
-        if (!user_id) {
-            return res.status(401).json({
-                success: false,
-                error: {
-                    code: 'INVALID_USER_DATA',
-                    message: 'Invalid user data from token verification',
-                    details: 'User ID not found in token verification response'
-                }
-            });
-        }
-
         console.log('Token verification successful for user:', user_id);
 
-        // Validate retry logic
+        // Validate retry logic - idempotency key already validated by middleware
         if (retry === true) {
-            if (!idempotencyKey) {
-                    return res.status(400).json({
-                        success: false,
-                        error: {
-                        code: 'RETRY_VALIDATION_ERROR',
-                        message: 'Idempotency key required for retry',
-                        details: 'idempotencyKey is required when retry is true'
-                    }
-                });
-            }
-            
             // Check if payment with this idempotency key exists
             const existingPaymentQuery = `
                 SELECT id, status, user_id, order_id, amount, currency, gateway_response, created_at, updated_at
@@ -442,11 +363,11 @@ router.post('/', async (req, res) => {
 
         // If not retrying or no existing payment found, create new payment
         if (!paymentResult) {
-            const query = `
+                    const query = `
                 SELECT * FROM create_payment_with_history(
                     $1, $2, $3, $4, $5, $6, $7, $8
-                )
-            `;
+                        )
+                    `;
 
         const result = await dbPoolManager.executeWrite(query, [
             user_id,
@@ -751,7 +672,10 @@ router.post('/', async (req, res) => {
 /**
  * GET /payments/{id} - Get payment by ID
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', 
+    validateHttpMethod(['GET']),
+    validateToken,
+    async (req, res) => {
     try {
         const { id } = req.params;
 
@@ -822,7 +746,10 @@ router.get('/:id', async (req, res) => {
 /**
  * GET /payments/user/{userId} - Get payments for a user
  */
-router.get('/user/:userId', async (req, res) => {
+router.get('/user/:userId', 
+    validateHttpMethod(['GET']),
+    validateToken,
+    async (req, res) => {
     try {
         const { userId } = req.params;
         const { limit = 20, offset = 0, status } = req.query;
